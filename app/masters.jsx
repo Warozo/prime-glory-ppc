@@ -11,14 +11,42 @@
     const { t, lang } = useI18n();
     const toast = useToast();
     const [tab, setTab] = React.useState('rm');
-    const [show, setShow] = React.useState(false);
+    const [modal, setModal] = React.useState(null); // { mode:'add' } | { mode:'edit', item }
     const items = tab === 'rm' ? state.raw : state.fg;
+    const key = tab === 'rm' ? 'raw' : 'fg';
 
-    function add(f) {
-      setState(prev => tab === 'rm'
-        ? { ...prev, raw: [...prev.raw, { code: f.code, name: f.name, nameTh: f.name, unit: f.unit, cat: f.cat, status: 'A' }] }
-        : { ...prev, fg: [...prev.fg, { code: f.code, name: f.name, nameTh: f.name, unit: f.unit, cat: f.cat, status: 'A' }] });
-      toast(t('toast.saved')); setShow(false);
+    function save(f) {
+      if (modal.mode === 'add' && items.some(x => x.code === f.code.trim())) {
+        toast(lang === 'th' ? 'รหัสนี้มีอยู่แล้ว' : 'Code already exists', 'warn'); return;
+      }
+      setState(prev => {
+        const list = prev[key].slice();
+        const rec = { name: f.name || f.nameTh, nameTh: f.nameTh || f.name, unit: f.unit, cat: f.cat };
+        if (modal.mode === 'edit') {
+          const i = list.findIndex(x => x.code === modal.item.code);
+          if (i !== -1) list[i] = { ...list[i], ...rec };
+        } else {
+          list.push({ code: f.code.trim(), status: 'A', ...rec });
+        }
+        return { ...prev, [key]: list };
+      });
+      toast(t('toast.saved')); setModal(null);
+    }
+
+    function del(it) {
+      if (tab === 'rm') {
+        const usedBom = Object.keys(state.boms).filter(fg => state.boms[fg].lines.some(l => l.rm === it.code));
+        if (usedBom.length) { toast((lang === 'th' ? 'ลบไม่ได้ — ใช้ใน BOM: ' : 'Cannot delete — used in BOM: ') + usedBom.join(', '), 'warn'); return; }
+        if (state.lots.some(l => l.rm === it.code)) { toast(lang === 'th' ? 'ลบไม่ได้ — ยังมีล็อตคงคลังอยู่' : 'Cannot delete — stock lots exist', 'warn'); return; }
+      } else {
+        if ((state.orders || []).some(o => o.fg === it.code)) { toast(lang === 'th' ? 'ลบไม่ได้ — มีคำสั่งซื้ออ้างอิง' : 'Cannot delete — referenced by orders', 'warn'); return; }
+      }
+      if (!window.confirm((lang === 'th' ? 'ยืนยันลบ ' : 'Delete ') + it.code + ' · ' + (lang === 'th' ? it.nameTh : it.name) + ' ?')) return;
+      setState(prev => {
+        if (tab === 'fg') { const boms = { ...prev.boms }; delete boms[it.code]; return { ...prev, fg: prev.fg.filter(x => x.code !== it.code), boms }; }
+        return { ...prev, raw: prev.raw.filter(x => x.code !== it.code) };
+      });
+      toast(lang === 'th' ? 'ลบเรียบร้อย' : 'Deleted', 'warn');
     }
 
     return React.createElement('div', null,
@@ -27,31 +55,40 @@
           React.createElement('div', { className: 'pill-tabs' },
             React.createElement('button', { className: tab === 'rm' ? 'on' : '', onClick: () => setTab('rm') }, t('rawmat')),
             React.createElement('button', { className: tab === 'fg' ? 'on' : '', onClick: () => setTab('fg') }, t('finished'))),
-          React.createElement('button', { className: 'btn btn-pri', onClick: () => setShow(true) }, React.createElement(Icon, { name: 'plus', size: 15 }), t('btn.new'))) }),
+          React.createElement('button', { className: 'btn btn-pri', onClick: () => setModal({ mode: 'add' }) }, React.createElement(Icon, { name: 'plus', size: 15 }), t('btn.new'))) }),
       React.createElement('div', { className: 'card' },
         React.createElement('table', { className: 'tbl' },
           React.createElement('thead', null, React.createElement('tr', null,
             React.createElement('th', null, tab === 'rm' ? 'RM ' + t('f.code') : 'FG ' + t('f.code')),
-            React.createElement('th', null, t('f.name')), React.createElement('th', null, t('f.unit')), React.createElement('th', null, t('f.category')), React.createElement('th', null, t('f.status')))),
-          React.createElement('tbody', null, items.map(it => React.createElement('tr', { key: it.code },
+            React.createElement('th', null, t('f.name')), React.createElement('th', null, t('f.unit')), React.createElement('th', null, t('f.category')), React.createElement('th', null, t('f.status')),
+            React.createElement('th', { style: { width: 90 } }, ''))),
+          React.createElement('tbody', null, items.length === 0
+            ? React.createElement('tr', null, React.createElement('td', { colSpan: 6, className: 'empty' }, t('tbl.noresults')))
+            : items.map(it => React.createElement('tr', { key: it.code },
             React.createElement('td', { className: 'mono', style: { fontWeight: 600, color: 'var(--primary)' } }, it.code),
             React.createElement('td', null, React.createElement('div', { style: { fontWeight: 600 } }, lang === 'th' ? it.nameTh : it.name), React.createElement('div', { className: 'faint', style: { fontSize: 10.5 } }, lang === 'th' ? it.name : it.nameTh)),
             React.createElement('td', { className: 'mono' }, it.unit),
             React.createElement('td', null, React.createElement('span', { className: 'badge badge-soft' }, it.cat)),
-            React.createElement('td', null, React.createElement('span', { className: 'badge', style: { color: it.status === 'A' ? 'var(--ok)' : 'var(--text-muted)', background: it.status === 'A' ? 'var(--ok-tint)' : 'var(--surface-3)' } }, it.status === 'A' ? t('f.active') : t('f.inactive'))))))) ),
-      show && React.createElement(ItemModal, { tab, t, onClose: () => setShow(false), onSubmit: add }));
+            React.createElement('td', null, React.createElement('span', { className: 'badge', style: { color: it.status === 'A' ? 'var(--ok)' : 'var(--text-muted)', background: it.status === 'A' ? 'var(--ok-tint)' : 'var(--surface-3)' } }, it.status === 'A' ? t('f.active') : t('f.inactive'))),
+            React.createElement('td', { className: 'num' }, React.createElement('div', { className: 'row', style: { gap: 4, justifyContent: 'flex-end' } },
+              React.createElement('button', { className: 'btn btn-sm btn-ghost btn-icon', title: t('btn.edit'), onClick: () => setModal({ mode: 'edit', item: it }) }, React.createElement(Icon, { name: 'edit', size: 13 })),
+              React.createElement('button', { className: 'btn btn-sm btn-ghost btn-icon', title: t('btn.delete'), onClick: () => del(it) }, React.createElement(Icon, { name: 'trash', size: 13, style: { color: 'var(--danger)' } })))))))) ),
+      modal && React.createElement(ItemModal, { tab, t, lang, edit: modal.mode === 'edit' ? modal.item : null, onClose: () => setModal(null), onSubmit: save }));
   }
 
-  function ItemModal({ tab, t, onClose, onSubmit }) {
-    const [f, setF] = React.useState({ code: '', name: '', unit: 'pcs', cat: '' });
+  function ItemModal({ tab, t, lang, edit, onClose, onSubmit }) {
+    const [f, setF] = React.useState(edit
+      ? { code: edit.code, name: edit.name, nameTh: edit.nameTh, unit: edit.unit, cat: edit.cat }
+      : { code: '', name: '', nameTh: '', unit: 'pcs', cat: '' });
     const set = (k, v) => setF(p => ({ ...p, [k]: v }));
-    return React.createElement(Modal, { title: t('btn.new') + ' · ' + (tab === 'rm' ? t('rawmat') : t('finished')), onClose, width: 480,
+    return React.createElement(Modal, { title: (edit ? t('btn.edit') : t('btn.new')) + ' · ' + (tab === 'rm' ? t('rawmat') : t('finished')), onClose, width: 480,
       footer: React.createElement(React.Fragment, null, React.createElement('button', { className: 'btn', onClick: onClose }, t('btn.cancel')),
-        React.createElement('button', { className: 'btn btn-pri', disabled: !f.code || !f.name, onClick: () => onSubmit(f) }, t('btn.save'))) },
+        React.createElement('button', { className: 'btn btn-pri', disabled: !f.code || (!f.name && !f.nameTh), onClick: () => onSubmit(f) }, t('btn.save'))) },
       React.createElement('div', { className: 'grid g-2', style: { gap: 12 } },
-        React.createElement(Field, { label: t('f.code'), required: true }, React.createElement('input', { className: 'input mono', value: f.code, onChange: e => set('code', e.target.value), placeholder: tab === 'rm' ? 'RM014' : 'FG006' })),
+        React.createElement(Field, { label: t('f.code'), required: true }, React.createElement('input', { className: 'input mono', value: f.code, disabled: !!edit, onChange: e => set('code', e.target.value), placeholder: tab === 'rm' ? 'RM014' : 'FG006' })),
         React.createElement(Field, { label: t('f.unit'), required: true }, React.createElement('select', { className: 'select', value: f.unit, onChange: e => set('unit', e.target.value) }, ['pcs', 'kg', 'g', 'L', 'ml'].map(u => React.createElement('option', { key: u }, u)))),
-        React.createElement('div', { style: { gridColumn: 'span 2' } }, React.createElement(Field, { label: t('f.name'), required: true }, React.createElement('input', { className: 'input', value: f.name, onChange: e => set('name', e.target.value) }))),
+        React.createElement('div', { style: { gridColumn: 'span 2' } }, React.createElement(Field, { label: (lang === 'th' ? 'ชื่อ (ไทย)' : 'Name (Thai)'), required: true }, React.createElement('input', { className: 'input', value: f.nameTh, onChange: e => set('nameTh', e.target.value) }))),
+        React.createElement('div', { style: { gridColumn: 'span 2' } }, React.createElement(Field, { label: (lang === 'th' ? 'ชื่อ (อังกฤษ)' : 'Name (English)') }, React.createElement('input', { className: 'input', value: f.name, onChange: e => set('name', e.target.value) }))),
         React.createElement('div', { style: { gridColumn: 'span 2' } }, React.createElement(Field, { label: t('f.category') }, React.createElement('input', { className: 'input', value: f.cat, onChange: e => set('cat', e.target.value), placeholder: tab === 'rm' ? 'Active / Base / Packaging' : 'Serum / Foundation / Lip' })))));
   }
 
@@ -62,8 +99,23 @@
     const [fgCode, setFgCode] = React.useState(state.fg[0].code);
     const [calcQty, setCalcQty] = React.useState(10000);
     const [editLine, setEditLine] = React.useState(null); // { idx, rm, qty, unit } or { idx:-1 } for new
+    const [fgEdit, setFgEdit] = React.useState(null);
     const bom = state.boms[fgCode];
-    const req = D.bomRequirement(state, fgCode, calcQty);
+    const req = fgCode ? D.bomRequirement(state, fgCode, calcQty) : [];
+
+    // keep selection valid if the current FG gets deleted (here or in another tab)
+    React.useEffect(() => { if (state.fg.length && !state.fg.some(f => f.code === fgCode)) setFgCode(state.fg[0].code); }, [state.fg.length]);
+
+    function saveFg(form) {
+      setState(prev => ({ ...prev, fg: prev.fg.map(x => x.code === fgEdit.code ? { ...x, name: form.name || form.nameTh, nameTh: form.nameTh || form.name, unit: form.unit, cat: form.cat } : x) }));
+      toast(t('toast.saved')); setFgEdit(null);
+    }
+    function delFg(f) {
+      if ((state.orders || []).some(o => o.fg === f.code)) { toast(lang === 'th' ? 'ลบไม่ได้ — มีคำสั่งซื้ออ้างอิง' : 'Cannot delete — referenced by orders', 'warn'); return; }
+      if (!window.confirm((lang === 'th' ? 'ยืนยันลบสินค้า ' : 'Delete product ') + f.code + ' · ' + (lang === 'th' ? f.nameTh : f.name) + ' ?')) return;
+      setState(prev => { const boms = { ...prev.boms }; delete boms[f.code]; return { ...prev, fg: prev.fg.filter(x => x.code !== f.code), boms }; });
+      toast(lang === 'th' ? 'ลบเรียบร้อย' : 'Deleted', 'warn');
+    }
 
     function ensureBom(prev) {
       const boms = { ...prev.boms };
@@ -97,10 +149,16 @@
         React.createElement('div', { className: 'card' },
           React.createElement('div', { className: 'card-h' }, React.createElement(Icon, { name: 'bom', size: 15, style: { color: 'var(--primary)' } }), React.createElement('h3', null, t('finished'))),
           React.createElement('div', { style: { padding: 8, display: 'flex', flexDirection: 'column', gap: 6 } },
-            state.fg.map(f => React.createElement('button', { key: f.code, onClick: () => setFgCode(f.code),
-              style: { textAlign: 'left', background: fgCode === f.code ? 'var(--primary-tint)' : 'var(--surface-2)', border: '1px solid ' + (fgCode === f.code ? 'var(--primary)' : 'var(--border)'), borderRadius: 7, padding: 9, cursor: 'pointer' } },
-              React.createElement('div', { className: 'row', style: { justifyContent: 'space-between' } }, React.createElement('span', { className: 'mono', style: { fontSize: 11, fontWeight: 700, color: 'var(--primary)' } }, f.code), state.boms[f.code] && React.createElement('span', { className: 'badge badge-soft mono', style: { fontSize: 9.5 } }, state.boms[f.code].version)),
-              React.createElement('div', { style: { fontSize: 12, fontWeight: 600, marginTop: 2 } }, lang === 'th' ? f.nameTh : f.name)))) ),
+            state.fg.length === 0
+              ? React.createElement('div', { className: 'empty', style: { fontSize: 12 } }, t('tbl.noresults'))
+              : state.fg.map(f => React.createElement('div', { key: f.code,
+                style: { background: fgCode === f.code ? 'var(--primary-tint)' : 'var(--surface-2)', border: '1px solid ' + (fgCode === f.code ? 'var(--primary)' : 'var(--border)'), borderRadius: 7, padding: 9 } },
+                React.createElement('div', { style: { cursor: 'pointer' }, onClick: () => setFgCode(f.code) },
+                  React.createElement('div', { className: 'row', style: { justifyContent: 'space-between' } }, React.createElement('span', { className: 'mono', style: { fontSize: 11, fontWeight: 700, color: 'var(--primary)' } }, f.code), state.boms[f.code] && React.createElement('span', { className: 'badge badge-soft mono', style: { fontSize: 9.5 } }, state.boms[f.code].version)),
+                  React.createElement('div', { style: { fontSize: 12, fontWeight: 600, marginTop: 2 } }, lang === 'th' ? f.nameTh : f.name)),
+                React.createElement('div', { className: 'row', style: { gap: 4, justifyContent: 'flex-end', marginTop: 6 } },
+                  React.createElement('button', { className: 'btn btn-sm btn-ghost btn-icon', title: t('btn.edit'), onClick: (e) => { e.stopPropagation(); setFgEdit(f); } }, React.createElement(Icon, { name: 'edit', size: 12 })),
+                  React.createElement('button', { className: 'btn btn-sm btn-ghost btn-icon', title: t('btn.delete'), onClick: (e) => { e.stopPropagation(); delFg(f); } }, React.createElement(Icon, { name: 'trash', size: 12, style: { color: 'var(--danger)' } }))))) ) ),
         React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 14 } },
           React.createElement('div', { className: 'card' },
             React.createElement('div', { className: 'card-h' },
@@ -133,6 +191,7 @@
                 React.createElement('td', { className: 'num mono', style: { fontWeight: 700 } }, fmt(r.need) + ' ' + r.unit),
                 React.createElement('td', { className: 'num mono' }, fmt(r.onHand) + ' ' + r.unit),
                 React.createElement('td', { className: 'num mono', style: { fontWeight: 700, color: r.short > 0 ? 'var(--danger)' : 'var(--ok)' } }, r.short > 0 ? '-' + fmt(r.short) : '✓')))))))),
+      fgEdit && React.createElement(ItemModal, { tab: 'fg', t, lang, edit: fgEdit, onClose: () => setFgEdit(null), onSubmit: saveFg }),
       editLine && React.createElement(BomLineModal, { state, t, lang, line: editLine, onClose: () => setEditLine(null), onSubmit: saveLine }));
   }
 

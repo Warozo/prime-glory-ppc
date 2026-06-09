@@ -92,26 +92,11 @@
   const ORDERS = [];
 
 
-  // RM stock lots (FIFO by expiry); remaining shows current on-hand
-  const LOTS = [
-    { id: 'L-9001', rm: 'RM001', supplier: 'ChemSupply Asia', qty: 120, remaining: 86, lot: 'RH26-0412', expiry: d(120), recv: d(-30) },
-    { id: 'L-9002', rm: 'RM002', supplier: 'PureActives Co.', qty: 15,  remaining: 9.2, lot: 'HA26-0388', expiry: d(45),  recv: d(-22) },
-    { id: 'L-9003', rm: 'RM003', supplier: 'AromaSource Ltd.', qty: 8,  remaining: 2.1, lot: 'RF26-0102', expiry: d(18),  recv: d(-40) },
-    { id: 'L-9004', rm: 'RM004', supplier: 'PureActives Co.', qty: 20,  remaining: 14,  lot: 'VC26-0451', expiry: d(60),  recv: d(-15) },
-    { id: 'L-9005', rm: 'RM005', supplier: 'PureActives Co.', qty: 12,  remaining: 1.4, lot: 'NC26-0233', expiry: d(25),  recv: d(-18) },
-    { id: 'L-9006', rm: 'RM006', supplier: 'ChemSupply Asia', qty: 200, remaining: 142, lot: 'GL26-0779', expiry: d(300), recv: d(-25) },
-    { id: 'L-9007', rm: 'RM007', supplier: 'ChemSupply Asia', qty: 80,  remaining: 51,  lot: 'TD26-0561', expiry: d(220), recv: d(-12) },
-    { id: 'L-9008', rm: 'RM010', supplier: 'PackPro Industries', qty: 30000, remaining: 18400, lot: 'GD26-1190', expiry: d(900), recv: d(-10) },
-    { id: 'L-9009', rm: 'RM011', supplier: 'PackPro Industries', qty: 30000, remaining: 9200, lot: 'CT26-1191', expiry: d(900), recv: d(-10) },
-    { id: 'L-9010', rm: 'RM003', supplier: 'AromaSource Ltd.', qty: 10, remaining: 10, lot: 'RF26-0140', expiry: d(8), recv: d(-3) },
-  ];
+  // RM stock lots (FIFO by expiry) — empty; the user receives their own stock
+  const LOTS = [];
 
-  const RECEIPTS = [
-    { id: 'GR-3310', recv: d(-3),  supplier: 'AromaSource Ltd.', rm: 'RM003', qty: 10, lot: 'RF26-0140', expiry: d(8) },
-    { id: 'GR-3309', recv: d(-10), supplier: 'PackPro Industries', rm: 'RM010', qty: 30000, lot: 'GD26-1190', expiry: d(900) },
-    { id: 'GR-3308', recv: d(-12), supplier: 'ChemSupply Asia', rm: 'RM007', qty: 80, lot: 'TD26-0561', expiry: d(220) },
-    { id: 'GR-3307', recv: d(-15), supplier: 'PureActives Co.', rm: 'RM004', qty: 20, lot: 'VC26-0451', expiry: d(60) },
-  ];
+  // Goods-receipt history — empty; filled when the user records receiving
+  const RECEIPTS = [];
 
   // Active production lots on the shop floor
   function buildLot(id, po, order, fg, qty, line, wfId, fillPattern) {
@@ -143,12 +128,8 @@
   // FG awaiting QC acceptance — empty; filled when a lot completes on the floor
   const FG_PENDING = [];
 
-  const FG_STOCK = [
-    { fg: 'FG001', qty: 14200, lot: 'LOT-X6', expiry: d(540) },
-    { fg: 'FG002', qty: 8600, lot: 'LOT-X3', expiry: d(500) },
-    { fg: 'FG003', qty: 5100, lot: 'LOT-X1', expiry: d(620) },
-    { fg: 'FG004', qty: 3200, lot: 'LOT-X2', expiry: d(480) },
-  ];
+  // Finished-goods stock — empty; filled when lots complete and pass QC
+  const FG_STOCK = [];
 
   const USERS = [
     { id: 'U01', username: 'somchai.p', name: 'Somchai Phan', email: 'somchai@primeglory.co', role: 'ppc', status: 'A', last: d(0), password: 'ppc123' },

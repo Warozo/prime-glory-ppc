@@ -16,6 +16,7 @@
     const [steps, setSteps] = React.useState(() => state.workflows[0].steps.map((s, i) => ({ ...s, uid: 'u' + i })));
     const dragInfo = React.useRef(null);
     const [overIdx, setOverIdx] = React.useState(null);
+    const [stepModal, setStepModal] = React.useState(false);
 
     function saveTemplate() {
       const cleanSteps = steps.map((s, i) => ({ key: s.key, name: s.name, nameTh: s.nameTh, dur: s.dur || 1, ic: s.ic, id: 'st' + i + '_' + s.key }));
@@ -60,29 +61,64 @@
     const totalDur = () => steps.reduce((a, s) => a + (s.dur || 1), 0);
     const usedKeys = steps.map(s => s.key);
 
+    function delTemplate(id) {
+      if (!window.confirm(lang === 'th' ? 'ยืนยันลบเทมเพลตนี้?' : 'Delete this template?')) return;
+      setState(prev => ({ ...prev, workflows: prev.workflows.filter(w => w.id !== id) }));
+      toast(lang === 'th' ? 'ลบเทมเพลตเรียบร้อย' : 'Template deleted');
+      if (tplId === id) {
+        const next = state.workflows.find(w => w.id !== id);
+        if (next) loadTpl(next.id);
+        else { setSteps([]); setTplName(lang === 'th' ? 'เทมเพลตใหม่' : 'New Template'); setTplId('new'); }
+      }
+    }
+    function delStep(key) {
+      const usedIn = state.workflows.filter(w => w.steps.some(s => s.key === key)).map(w => w.name);
+      if (usedIn.length) { toast((lang === 'th' ? 'ลบไม่ได้ — ใช้ในเทมเพลต: ' : 'Cannot delete — used in: ') + usedIn.join(', '), 'warn'); return; }
+      if (!window.confirm(lang === 'th' ? 'ยืนยันลบขั้นตอนนี้ออกจากคลัง?' : 'Delete this step from the library?')) return;
+      setState(prev => ({ ...prev, stepLib: prev.stepLib.filter(s => s.key !== key) }));
+      toast(lang === 'th' ? 'ลบขั้นตอนเรียบร้อย' : 'Step deleted');
+    }
+    function addStep(form) {
+      const k = (form.key || '').trim();
+      if (!k) { toast(lang === 'th' ? 'ต้องระบุรหัสขั้นตอน' : 'Step key required', 'warn'); return; }
+      if (state.stepLib.some(s => s.key === k)) { toast(lang === 'th' ? 'รหัสขั้นตอนซ้ำ' : 'Step key already exists', 'warn'); return; }
+      setState(prev => ({ ...prev, stepLib: [...prev.stepLib, { key: k, name: form.name || form.nameTh, nameTh: form.nameTh || form.name, dur: +form.dur || 1, ic: form.ic }] }));
+      toast(t('toast.saved')); setStepModal(false);
+    }
+
     // Template list card
     const tplCard = e('div', { className: 'card' },
       e('div', { className: 'card-h' }, e(Icon, { name: 'layers', size: 15, style: { color: 'var(--primary)' } }), e('h3', null, t('dsg.templates'))),
       e('div', { style: { padding: 8, display: 'flex', flexDirection: 'column', gap: 6 } },
-        state.workflows.map(w => e('button', { key: w.id, onClick: () => loadTpl(w.id),
-          style: { textAlign: 'left', background: tplId === w.id ? 'var(--primary-tint)' : 'var(--surface-2)', border: '1px solid ' + (tplId === w.id ? 'var(--primary)' : 'var(--border)'), borderRadius: 7, padding: '9px 11px', cursor: 'pointer' } },
-          e('div', { style: { fontSize: 12, fontWeight: 600 } }, w.name),
-          e('div', { className: 'faint mono', style: { fontSize: 10, marginTop: 2 } }, w.steps.length + ' ' + (lang === 'th' ? 'ขั้นตอน' : 'steps') + ' · Line ' + w.line))),
+        state.workflows.map(w => e('div', { key: w.id,
+          style: { background: tplId === w.id ? 'var(--primary-tint)' : 'var(--surface-2)', border: '1px solid ' + (tplId === w.id ? 'var(--primary)' : 'var(--border)'), borderRadius: 7, padding: '9px 11px' } },
+          e('div', { style: { display: 'flex', alignItems: 'flex-start', gap: 6 } },
+            e('div', { style: { flex: 1, minWidth: 0, cursor: 'pointer' }, onClick: () => loadTpl(w.id) },
+              e('div', { style: { fontSize: 12, fontWeight: 600 } }, w.name),
+              e('div', { className: 'faint mono', style: { fontSize: 10, marginTop: 2 } }, w.steps.length + ' ' + (lang === 'th' ? 'ขั้นตอน' : 'steps') + (w.line ? ' · Line ' + w.line : ''))),
+            e('button', { className: 'btn btn-sm btn-ghost btn-icon', title: t('btn.delete'), onClick: (ev) => { ev.stopPropagation(); delTemplate(w.id); } }, e(Icon, { name: 'trash', size: 12, style: { color: 'var(--danger)' } }))))),
         e('button', { className: 'btn btn-sm', style: { marginTop: 4 }, onClick: () => { setSteps([]); setTplName(lang === 'th' ? 'เทมเพลตใหม่' : 'New Template'); setTplId('new'); } },
           e(Icon, { name: 'plus', size: 13 }), t('btn.new'))));
 
     // Palette card
     const paletteCard = e('div', { className: 'card' },
-      e('div', { className: 'card-h' }, e(Icon, { name: 'designer', size: 15, style: { color: 'var(--primary)' } }), e('h3', null, t('dsg.palette'))),
+      e('div', { className: 'card-h' }, e(Icon, { name: 'designer', size: 15, style: { color: 'var(--primary)' } }), e('h3', null, t('dsg.palette')),
+        e('div', { className: 'card-h-actions' },
+          e('button', { className: 'btn btn-sm btn-pri', title: (lang === 'th' ? 'เพิ่มขั้นตอน' : 'Add step'), onClick: () => setStepModal(true) }, e(Icon, { name: 'plus', size: 12 })))),
       e('div', { style: { padding: 8, display: 'flex', flexDirection: 'column', gap: 6 } },
-        state.stepLib.map(s => e('div', { key: s.key, draggable: true,
-          onDragStart: () => { dragInfo.current = { type: 'new', key: s.key }; },
-          style: { display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 7, padding: '7px 9px', cursor: 'grab', opacity: usedKeys.includes(s.key) ? 0.55 : 1 } },
-          e('span', { style: { width: 24, height: 24, borderRadius: 6, background: 'var(--primary-tint)', color: 'var(--primary)', display: 'grid', placeItems: 'center', flexShrink: 0 } }, e(Icon, { name: STEP_ICONS[s.ic] || 'box', size: 13 })),
-          e('div', { style: { minWidth: 0 } },
-            e('div', { style: { fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, lang === 'th' ? s.nameTh : s.name),
-            e('div', { className: 'faint', style: { fontSize: 9.5 } }, s.dur + (lang === 'th' ? ' ชม.' : 'h'))),
-          e(Icon, { name: 'plus', size: 12, style: { marginLeft: 'auto', color: 'var(--text-faint)' } })))));
+        state.stepLib.length === 0
+          ? e('div', { className: 'empty', style: { fontSize: 11 } }, lang === 'th' ? 'ยังไม่มีขั้นตอนในคลัง' : 'No steps in library')
+          : state.stepLib.map(s => e('div', { key: s.key, draggable: true,
+            onDragStart: () => { dragInfo.current = { type: 'new', key: s.key }; },
+            style: { display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 7, padding: '7px 9px', cursor: 'grab', opacity: usedKeys.includes(s.key) ? 0.55 : 1 } },
+            e('span', { style: { width: 24, height: 24, borderRadius: 6, background: 'var(--primary-tint)', color: 'var(--primary)', display: 'grid', placeItems: 'center', flexShrink: 0 } }, e(Icon, { name: STEP_ICONS[s.ic] || 'box', size: 13 })),
+            e('div', { style: { minWidth: 0, flex: 1 } },
+              e('div', { style: { fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, lang === 'th' ? s.nameTh : s.name),
+              e('div', { className: 'faint', style: { fontSize: 9.5 } }, s.dur + (lang === 'th' ? ' ชม.' : 'h'))),
+            e('button', { className: 'btn btn-sm btn-ghost btn-icon', draggable: false, title: t('btn.delete'),
+              onMouseDown: (ev) => ev.stopPropagation(),
+              onClick: (ev) => { ev.stopPropagation(); delStep(s.key); },
+              style: { marginLeft: 'auto', flexShrink: 0 } }, e(Icon, { name: 'trash', size: 12, style: { color: 'var(--danger)' } }))))));
 
     // Canvas children
     const canvasInner = [];
@@ -113,7 +149,27 @@
     return e('div', null,
       e(PageHead, { title: t('dsg.title'), sub: t('dsg.sub') }),
       e('div', { style: { display: 'grid', gridTemplateColumns: '210px 200px 1fr', gap: 14, alignItems: 'start' } },
-        tplCard, paletteCard, canvasCard));
+        tplCard, paletteCard, canvasCard),
+      stepModal && e(StepLibModal, { t, lang, onClose: () => setStepModal(false), onSubmit: addStep }));
+  }
+
+  function StepLibModal({ t, lang, onClose, onSubmit }) {
+    const Field = window.PG_UI.Field, Modal = window.PG_UI.Modal;
+    const IC_OPTIONS = ['box', 'blend', 'fill', 'seal', 'box2', 'wrap', 'carton', 'qc', 'label'];
+    const [f, setF] = React.useState({ key: '', nameTh: '', name: '', dur: 1, ic: 'box' });
+    const set = (k, v) => setF(p => ({ ...p, [k]: v }));
+    return e(Modal, { title: (lang === 'th' ? 'เพิ่มขั้นตอนใหม่' : 'Add New Step'), onClose, width: 460,
+      footer: e(React.Fragment, null, e('button', { className: 'btn', onClick: onClose }, t('btn.cancel')),
+        e('button', { className: 'btn btn-pri', disabled: !f.key.trim() || (!f.nameTh && !f.name), onClick: () => onSubmit(f) }, t('btn.save'))) },
+      e('div', { className: 'grid g-2', style: { gap: 12 } },
+        e(Field, { label: (lang === 'th' ? 'รหัสขั้นตอน (key)' : 'Step key'), required: true }, e('input', { className: 'input mono', value: f.key, onChange: ev => set('key', ev.target.value.replace(/\s+/g, '')), placeholder: 'mystep' })),
+        e(Field, { label: (lang === 'th' ? 'เวลา (ชม.)' : 'Duration (h)'), required: true }, e('input', { className: 'input mono', type: 'number', min: 1, value: f.dur, onChange: ev => set('dur', ev.target.value) })),
+        e('div', { style: { gridColumn: 'span 2' } }, e(Field, { label: (lang === 'th' ? 'ชื่อ (ไทย)' : 'Name (Thai)'), required: true }, e('input', { className: 'input', value: f.nameTh, onChange: ev => set('nameTh', ev.target.value) }))),
+        e('div', { style: { gridColumn: 'span 2' } }, e(Field, { label: (lang === 'th' ? 'ชื่อ (อังกฤษ)' : 'Name (English)') }, e('input', { className: 'input', value: f.name, onChange: ev => set('name', ev.target.value) }))),
+        e('div', { style: { gridColumn: 'span 2' } }, e(Field, { label: (lang === 'th' ? 'ไอคอน' : 'Icon') },
+          e('div', { className: 'row', style: { gap: 6, flexWrap: 'wrap' } }, IC_OPTIONS.map(ic => e('button', { key: ic, type: 'button', onClick: () => set('ic', ic),
+            style: { width: 34, height: 34, borderRadius: 7, display: 'grid', placeItems: 'center', cursor: 'pointer', background: f.ic === ic ? 'var(--primary)' : 'var(--surface-2)', color: f.ic === ic ? '#fff' : 'var(--text-muted)', border: '1px solid ' + (f.ic === ic ? 'var(--primary)' : 'var(--border)') } },
+            e(Icon, { name: STEP_ICONS[ic] || 'box', size: 15 }))))))));
   }
 
   function StepRow({ s, i, lang, t, dragInfo, setOverIdx, onDropAt, removeStep }) {
