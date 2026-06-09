@@ -268,29 +268,48 @@
   function Users({ state, setState }) {
     const { t, lang } = useI18n();
     const toast = useToast();
-    const [show, setShow] = React.useState(false);
+    const [modal, setModal] = React.useState(null); // { mode:'add' } | { mode:'edit', user }
     const ROLE_COLOR = { admin: '#cf3b3b', ppc: '#2d5bd7', warehouse: '#7b5cd9', production: '#e08a1e', management: '#1f8a5b' };
 
     function toggle(id) { setState(prev => ({ ...prev, users: prev.users.map(u => u.id === id ? { ...u, status: u.status === 'A' ? 'I' : 'A' } : u) })); toast(t('toast.saved')); }
-    function add(f) {
-      if (state.users.some(u => u.username === f.username.trim())) { toast(lang === 'th' ? 'ชื่อผู้ใช้ซ้ำ' : 'Username already exists', 'warn'); return; }
-      setState(prev => ({ ...prev, users: [...prev.users, { id: 'U' + (prev.users.length + 1).toString().padStart(2, '0'), username: f.username.trim(), name: f.name, email: f.email, role: f.role, status: 'A', last: prev.today, password: f.password }] }));
-      toast(t('toast.usercreated')); setShow(false);
-    }
     function resetPw(u) {
       const np = Math.random().toString(36).slice(2, 8);
       setState(prev => ({ ...prev, users: prev.users.map(x => x.id === u.id ? { ...x, password: np } : x) }));
       toast((lang === 'th' ? 'รหัสผ่านใหม่: ' : 'New password: ') + np);
     }
+    function save(f) {
+      const uname = f.username.trim();
+      const isEdit = modal.mode === 'edit';
+      if (state.users.some(u => u.username === uname && (!isEdit || u.id !== modal.user.id))) {
+        toast(lang === 'th' ? 'ชื่อผู้ใช้ซ้ำ' : 'Username already exists', 'warn'); return;
+      }
+      setState(prev => {
+        if (isEdit) {
+          return { ...prev, users: prev.users.map(u => u.id === modal.user.id
+            ? { ...u, name: f.name, username: uname, email: f.email, role: f.role, password: f.password ? f.password : u.password } : u) };
+        }
+        const nums = prev.users.map(x => parseInt((x.id || '').replace(/\D/g, ''), 10)).filter(n => !isNaN(n));
+        const id = 'U' + String((nums.length ? Math.max.apply(null, nums) : 0) + 1).padStart(2, '0');
+        return { ...prev, users: [...prev.users, { id, username: uname, name: f.name, email: f.email, role: f.role, status: 'A', last: prev.today, password: f.password }] };
+      });
+      toast(isEdit ? t('toast.saved') : t('toast.usercreated')); setModal(null);
+    }
+    function del(u) {
+      const activeAdmins = state.users.filter(x => x.role === 'admin' && x.status === 'A');
+      if (u.role === 'admin' && activeAdmins.length <= 1) { toast(lang === 'th' ? 'ลบไม่ได้ — ต้องมีผู้ดูแลระบบที่ใช้งานอย่างน้อย 1 คน' : 'Cannot delete — keep at least one active admin', 'warn'); return; }
+      if (!window.confirm((lang === 'th' ? 'ยืนยันลบผู้ใช้ ' : 'Delete user ') + u.username + ' ?')) return;
+      setState(prev => ({ ...prev, users: prev.users.filter(x => x.id !== u.id) }));
+      toast(lang === 'th' ? 'ลบผู้ใช้เรียบร้อย' : 'User deleted', 'warn');
+    }
 
     return React.createElement('div', null,
       React.createElement(PageHead, { title: t('nav.users'), sub: t('navsec.admin'),
-        actions: React.createElement('button', { className: 'btn btn-pri', onClick: () => setShow(true) }, React.createElement(Icon, { name: 'plus', size: 15 }), t('btn.new')) }),
+        actions: React.createElement('button', { className: 'btn btn-pri', onClick: () => setModal({ mode: 'add' }) }, React.createElement(Icon, { name: 'plus', size: 15 }), t('btn.new')) }),
       React.createElement('div', { className: 'card' },
         React.createElement('table', { className: 'tbl' },
           React.createElement('thead', null, React.createElement('tr', null,
             React.createElement('th', null, t('f.name')), React.createElement('th', null, t('f.username')), React.createElement('th', null, t('f.password')), React.createElement('th', null, t('f.email')),
-            React.createElement('th', null, t('f.role')), React.createElement('th', null, lang === 'th' ? 'เข้าใช้ล่าสุด' : 'Last login'), React.createElement('th', null, t('f.status')), React.createElement('th', { style: { width: 170 } }, ''))),
+            React.createElement('th', null, t('f.role')), React.createElement('th', null, lang === 'th' ? 'เข้าใช้ล่าสุด' : 'Last login'), React.createElement('th', null, t('f.status')), React.createElement('th', { style: { width: 230 } }, ''))),
           React.createElement('tbody', null, state.users.map(u => React.createElement('tr', { key: u.id },
             React.createElement('td', null, React.createElement('div', { className: 'row', style: { gap: 9 } },
               React.createElement('span', { style: { width: 28, height: 28, borderRadius: '50%', background: ROLE_COLOR[u.role], color: '#fff', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 700 } }, u.name.split(' ').map(x => x[0]).join('').slice(0, 2)),
@@ -302,9 +321,11 @@
             React.createElement('td', { className: 'mono faint' }, fmtDate(u.last)),
             React.createElement('td', null, React.createElement('span', { className: 'badge', style: { color: u.status === 'A' ? 'var(--ok)' : 'var(--text-muted)', background: u.status === 'A' ? 'var(--ok-tint)' : 'var(--surface-3)' } }, u.status === 'A' ? t('f.active') : t('f.inactive'))),
             React.createElement('td', null, React.createElement('div', { className: 'row', style: { gap: 5 } },
+              React.createElement('button', { className: 'btn btn-sm btn-icon', onClick: () => setModal({ mode: 'edit', user: u }), title: t('btn.edit') }, React.createElement(Icon, { name: 'edit', size: 12 })),
               React.createElement('button', { className: 'btn btn-sm', onClick: () => resetPw(u), title: t('users.resetpw') }, React.createElement(Icon, { name: 'lock', size: 12 })),
-              React.createElement('button', { className: 'btn btn-sm', onClick: () => toggle(u.id) }, u.status === 'A' ? t('f.inactive') : t('f.active')))))))) ),
-      show && React.createElement(UserModal, { state, t, onClose: () => setShow(false), onSubmit: add }));
+              React.createElement('button', { className: 'btn btn-sm', onClick: () => toggle(u.id) }, u.status === 'A' ? t('f.inactive') : t('f.active')),
+              React.createElement('button', { className: 'btn btn-sm btn-icon', onClick: () => del(u), title: t('btn.delete') }, React.createElement(Icon, { name: 'trash', size: 12, style: { color: 'var(--danger)' } })))))))) ),
+      modal && React.createElement(UserModal, { state, t, lang, edit: modal.mode === 'edit' ? modal.user : null, onClose: () => setModal(null), onSubmit: save }));
   }
 
   function PwCell({ pw }) {
@@ -315,19 +336,22 @@
       React.createElement(window.PG_UI.Icon, { name: 'search', size: 11, style: { opacity: .5 } }));
   }
 
-  function UserModal({ state, t, onClose, onSubmit }) {
-    const [f, setF] = React.useState({ name: '', username: '', email: '', role: 'ppc', password: '' });
+  function UserModal({ state, t, lang, edit, onClose, onSubmit }) {
+    const [f, setF] = React.useState(edit
+      ? { name: edit.name, username: edit.username, email: edit.email || '', role: edit.role, password: '' }
+      : { name: '', username: '', email: '', role: 'ppc', password: '' });
     const set = (k, v) => setF(p => ({ ...p, [k]: v }));
     const gen = () => set('password', Math.random().toString(36).slice(2, 10));
-    return React.createElement(Modal, { title: t('btn.new') + ' · ' + t('nav.users'), onClose, width: 480,
+    const valid = f.name && f.username.trim() && (edit || f.password);
+    return React.createElement(Modal, { title: (edit ? t('btn.edit') : t('btn.new')) + ' · ' + t('nav.users'), onClose, width: 480,
       footer: React.createElement(React.Fragment, null, React.createElement('button', { className: 'btn', onClick: onClose }, t('btn.cancel')),
-        React.createElement('button', { className: 'btn btn-pri', disabled: !f.name || !f.username || !f.password, onClick: () => onSubmit(f) }, t('users.create'))) },
+        React.createElement('button', { className: 'btn btn-pri', disabled: !valid, onClick: () => onSubmit(f) }, edit ? t('btn.save') : t('users.create'))) },
       React.createElement('div', { className: 'grid g-2', style: { gap: 12 } },
         React.createElement('div', { style: { gridColumn: 'span 2' } }, React.createElement(Field, { label: t('f.name'), required: true }, React.createElement('input', { className: 'input', value: f.name, onChange: e => set('name', e.target.value) }))),
         React.createElement(Field, { label: t('f.username'), required: true }, React.createElement('input', { className: 'input mono', value: f.username, onChange: e => set('username', e.target.value), placeholder: 'first.last' })),
         React.createElement(Field, { label: t('f.role'), required: true }, React.createElement('select', { className: 'select', value: f.role, onChange: e => set('role', e.target.value) },
           ['admin', 'ppc', 'warehouse', 'production', 'management'].map(r => React.createElement('option', { key: r, value: r }, t('role.' + r))))),
-        React.createElement('div', { style: { gridColumn: 'span 2' } }, React.createElement(Field, { label: t('f.password'), required: true, hint: t('users.pwhint') },
+        React.createElement('div', { style: { gridColumn: 'span 2' } }, React.createElement(Field, { label: t('f.password'), required: !edit, hint: edit ? (lang === 'th' ? 'เว้นว่างถ้าไม่เปลี่ยนรหัสผ่าน' : 'Leave blank to keep current password') : t('users.pwhint') },
           React.createElement('div', { className: 'row', style: { gap: 8 } },
             React.createElement('input', { className: 'input mono', value: f.password, onChange: e => set('password', e.target.value), placeholder: '••••••••' }),
             React.createElement('button', { className: 'btn btn-sm', type: 'button', onClick: gen }, t('users.generate'))))),
