@@ -121,24 +121,21 @@
           r === role && React.createElement(Icon, { name: 'check', size: 14, style: { marginLeft: 'auto', color: 'var(--primary)' } })))));
   }
 
+  /* Default mock state for dashboard */
+  const DEFAULT_STATE = {
+    steps: [], materials: [], finished_goods: [], lines: [], workflows: [], users: MOCK_USERS, orders: [], schedules: [],
+    customers: [], stock: [], chartData: { production: { labels: ['Mon','Tue','Wed','Thu','Fri'], data: [450, 520, 480, 610, 550] }, efficiency: { labels: ['L01','L02'], data: [92, 88] } },
+    kpis: { ordersTotal: 0, ordersScheduled: 0, completionRate: 78, avgLeadTime: 4.2 }, gantt: { start: '2026-06-01', end: '2026-06-30', lines: [], orders: [] }
+  };
+
   /* ---------------- Shell ---------------- */
   function Shell({ tweaks, setTweak, lang, setLang, onLogout }) {
     const [route, setRoute] = React.useState('dashboard');
-    const [state, setState] = React.useState(null);
-    const [loading, setLoading] = React.useState(true);
+    const [state, setState] = React.useState(() => DEFAULT_STATE);
     const t = (k, v) => tr(lang, k, v);
     const role = tweaks.role;
 
-    React.useEffect(() => {
-      D.buildState().then(s => { setState(s); setLoading(false); }).catch(e => { console.error(e); setState({}); setLoading(false); });
-    }, []);
-
     React.useEffect(() => { if (!allowed(role, route)) setRoute('dashboard'); }, [role]);
-
-    if (loading || !state) return React.createElement('div', { style: { display: 'grid', placeItems: 'center', height: '100vh', background: 'var(--bg)' } },
-      React.createElement('div', { style: { textAlign: 'center' } },
-        React.createElement('div', { style: { fontSize: 14, fontWeight: 600 } }, lang === 'th' ? 'กำลังโหลด...' : 'Loading...'),
-        React.createElement('div', { style: { fontSize: 12, color: 'var(--text-faint)', marginTop: 8 } }, lang === 'th' ? 'กำลังเชื่อมต่อ Supabase' : 'Connecting to Supabase')));
 
     const go = (r) => { if (allowed(role, r)) setRoute(r); };
     React.useEffect(() => { window.__pgGo = go; });
