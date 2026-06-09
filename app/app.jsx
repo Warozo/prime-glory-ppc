@@ -57,8 +57,8 @@
       onLogin(found.role);
     };
     return React.createElement('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', height: '100%' } },
-      React.createElement('div', { style: { background: 'linear-gradient(155deg,#1b2e4d,#0f1c31)', color: '#fff', padding: '56px 60px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative', overflow: 'hidden' } },
-        React.createElement('div', { style: { position: 'absolute', inset: 0, opacity: .08, backgroundImage: 'repeating-linear-gradient(45deg,#fff 0 1px,transparent 1px 22px)' } }),
+      React.createElement('div', { style: { background: 'linear-gradient(155deg,rgba(27,46,77,.78),rgba(15,28,49,.86)), url(app/login-bg.png) center/cover no-repeat', backgroundColor: '#0f1c31', color: '#fff', padding: '56px 60px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative', overflow: 'hidden' } },
+        React.createElement('div', { style: { position: 'absolute', inset: 0, opacity: .06, backgroundImage: 'repeating-linear-gradient(45deg,#fff 0 1px,transparent 1px 22px)' } }),
         React.createElement('div', { className: 'row', style: { gap: 12, position: 'relative' } },
           React.createElement('div', { className: 'sb-logo', style: { width: 38, height: 38, fontSize: 18 } }, 'PG'),
           React.createElement('div', null, React.createElement('div', { style: { fontWeight: 700, fontSize: 18 } }, 'Prime Glory'),
