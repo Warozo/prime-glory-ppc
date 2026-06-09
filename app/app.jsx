@@ -144,7 +144,9 @@
     if (!state) return React.createElement('div', { style: { display: 'grid', placeItems: 'center', height: '100vh', background: 'var(--bg)', color: 'var(--text-muted)', fontSize: 14 } },
       lang === 'th' ? 'กำลังโหลดข้อมูลจากเซิร์ฟเวอร์…' : 'Loading data from server…');
 
-    const props = { state, setState, go };
+    // Delete actions are limited to admin and PPC across all modules
+    const canDelete = role === 'admin' || role === 'ppc';
+    const props = { state, setState, go, canDelete };
     const waitingCount = (state.orders || []).filter(o => o.status === 'waiting').length;
 
     const curLabel = t(NAV_LABEL[route] || 'nav.dashboard');

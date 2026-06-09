@@ -10,7 +10,7 @@
   const FLOW = ['request', 'waiting', 'reserved', 'scheduled', 'completed'];
   const NEXT = { request: 'waiting', waiting: 'reserved', reserved: 'scheduled', scheduled: 'completed' };
 
-  function OrderFlow({ state, setState, go }) {
+  function OrderFlow({ state, setState, go, canDelete }) {
     const { t, lang } = useI18n();
     const toast = useToast();
     const [sel, setSel] = React.useState(null);
@@ -123,7 +123,7 @@
               React.createElement('span', { style: { marginLeft: 'auto', fontSize: 11, fontWeight: 700, color: 'var(--text-faint)' } }, items.length)),
             React.createElement('div', { style: { padding: 8, display: 'flex', flexDirection: 'column', gap: 8 } },
               items.length === 0 && React.createElement('div', { className: 'faint', style: { fontSize: 10.5, textAlign: 'center', padding: '14px 0' } }, '—'),
-              items.map(o => React.createElement(OrderCard, { key: o.id, o, state, lang, onClick: () => setSel(o.id), onDelete: (o.status === 'request' || o.status === 'waiting') ? () => del(o) : null }))));
+              items.map(o => React.createElement(OrderCard, { key: o.id, o, state, lang, onClick: () => setSel(o.id), onDelete: (canDelete && (o.status === 'request' || o.status === 'waiting')) ? () => del(o) : null }))));
         })),
 
       order && React.createElement(OrderDetail, { order, state, setState, t, lang, onClose: () => setSel(null), onAdvance: requestAdvance, onBack: back, onCancelReserve: cancelReservation, go }),

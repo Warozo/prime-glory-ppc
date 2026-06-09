@@ -7,7 +7,7 @@
   const D = window.PG_DATA;
 
   /* ---------------- Item Master ---------------- */
-  function ItemMaster({ state, setState }) {
+  function ItemMaster({ state, setState, canDelete }) {
     const { t, lang } = useI18n();
     const toast = useToast();
     const [tab, setTab] = React.useState('rm');
@@ -72,7 +72,7 @@
             React.createElement('td', null, React.createElement('span', { className: 'badge', style: { color: it.status === 'A' ? 'var(--ok)' : 'var(--text-muted)', background: it.status === 'A' ? 'var(--ok-tint)' : 'var(--surface-3)' } }, it.status === 'A' ? t('f.active') : t('f.inactive'))),
             React.createElement('td', { className: 'num' }, React.createElement('div', { className: 'row', style: { gap: 4, justifyContent: 'flex-end' } },
               React.createElement('button', { className: 'btn btn-sm btn-ghost btn-icon', title: t('btn.edit'), onClick: () => setModal({ mode: 'edit', item: it }) }, React.createElement(Icon, { name: 'edit', size: 13 })),
-              React.createElement('button', { className: 'btn btn-sm btn-ghost btn-icon', title: t('btn.delete'), onClick: () => del(it) }, React.createElement(Icon, { name: 'trash', size: 13, style: { color: 'var(--danger)' } })))))))) ),
+              canDelete && React.createElement('button', { className: 'btn btn-sm btn-ghost btn-icon', title: t('btn.delete'), onClick: () => del(it) }, React.createElement(Icon, { name: 'trash', size: 13, style: { color: 'var(--danger)' } })))))))) ),
       modal && React.createElement(ItemModal, { tab, t, lang, edit: modal.mode === 'edit' ? modal.item : null, onClose: () => setModal(null), onSubmit: save }));
   }
 
@@ -93,7 +93,7 @@
   }
 
   /* ---------------- BOM Management ---------------- */
-  function BOM({ state, setState }) {
+  function BOM({ state, setState, canDelete }) {
     const { t, lang } = useI18n();
     const toast = useToast();
     const [fgCode, setFgCode] = React.useState(state.fg[0].code);
@@ -158,7 +158,7 @@
                   React.createElement('div', { style: { fontSize: 12, fontWeight: 600, marginTop: 2 } }, lang === 'th' ? f.nameTh : f.name)),
                 React.createElement('div', { className: 'row', style: { gap: 4, justifyContent: 'flex-end', marginTop: 6 } },
                   React.createElement('button', { className: 'btn btn-sm btn-ghost btn-icon', title: t('btn.edit'), onClick: (e) => { e.stopPropagation(); setFgEdit(f); } }, React.createElement(Icon, { name: 'edit', size: 12 })),
-                  React.createElement('button', { className: 'btn btn-sm btn-ghost btn-icon', title: t('btn.delete'), onClick: (e) => { e.stopPropagation(); delFg(f); } }, React.createElement(Icon, { name: 'trash', size: 12, style: { color: 'var(--danger)' } }))))) ) ),
+                  canDelete && React.createElement('button', { className: 'btn btn-sm btn-ghost btn-icon', title: t('btn.delete'), onClick: (e) => { e.stopPropagation(); delFg(f); } }, React.createElement(Icon, { name: 'trash', size: 12, style: { color: 'var(--danger)' } }))))) ) ),
         React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 14 } },
           React.createElement('div', { className: 'card' },
             React.createElement('div', { className: 'card-h' },
@@ -176,7 +176,7 @@
                 React.createElement('td', { className: 'mono' }, l.unit),
                 React.createElement('td', { className: 'num' }, React.createElement('div', { className: 'row', style: { gap: 4, justifyContent: 'flex-end' } },
                   React.createElement('button', { className: 'btn btn-sm btn-ghost btn-icon', onClick: () => setEditLine({ idx: i, rm: l.rm, qty: l.qty, unit: l.unit }) }, React.createElement(Icon, { name: 'edit', size: 13 })),
-                  React.createElement('button', { className: 'btn btn-sm btn-ghost btn-icon', onClick: () => delLine(i) }, React.createElement(Icon, { name: 'trash', size: 13, style: { color: 'var(--danger)' } })))))) 
+                  canDelete && React.createElement('button', { className: 'btn btn-sm btn-ghost btn-icon', onClick: () => delLine(i) }, React.createElement(Icon, { name: 'trash', size: 13, style: { color: 'var(--danger)' } }))))))
                 : React.createElement('tr', null, React.createElement('td', { colSpan: 5, className: 'empty' }, t('tbl.noresults')))))),
           React.createElement('div', { className: 'card' },
             React.createElement('div', { className: 'card-h' }, React.createElement(Icon, { name: 'calc', size: 15, style: { color: 'var(--primary)' } }), React.createElement('h3', null, lang === 'th' ? 'คำนวณความต้องการวัตถุดิบ' : 'Material Requirement Calculation'),
@@ -210,7 +210,7 @@
   }
 
   /* ---------------- Customer Orders ---------------- */
-  function CustomerOrders({ state, setState, go }) {
+  function CustomerOrders({ state, setState, go, canDelete }) {
     const { t, lang } = useI18n();
     const toast = useToast();
     const [show, setShow] = React.useState(false);
@@ -242,7 +242,7 @@
             React.createElement('td', { className: 'mono faint', onClick: () => go('flow') }, fmtDate(o.due)),
             React.createElement('td', { onClick: () => go('flow') }, React.createElement(PriorityBadge, { p: o.priority })),
             React.createElement('td', { onClick: () => go('flow') }, React.createElement(StatusBadge, { status: o.status })),
-            React.createElement('td', null, o.status === 'request'
+            React.createElement('td', null, (o.status === 'request' && canDelete)
               ? React.createElement('button', { className: 'btn btn-sm btn-ghost btn-icon', title: t('btn.delete'), onClick: (e) => { e.stopPropagation(); del(o.id); } }, React.createElement(Icon, { name: 'trash', size: 14, style: { color: 'var(--danger)' } }))
               : React.createElement('span', { className: 'faint', style: { fontSize: 14 } }, '—')))))) ),
       show && React.createElement(OrderModal, { state, t, lang, onClose: () => setShow(false), onSubmit: add }));
@@ -265,7 +265,7 @@
   }
 
   /* ---------------- User Management ---------------- */
-  function Users({ state, setState }) {
+  function Users({ state, setState, canDelete }) {
     const { t, lang } = useI18n();
     const toast = useToast();
     const [modal, setModal] = React.useState(null); // { mode:'add' } | { mode:'edit', user }
@@ -324,7 +324,7 @@
               React.createElement('button', { className: 'btn btn-sm btn-icon', onClick: () => setModal({ mode: 'edit', user: u }), title: t('btn.edit') }, React.createElement(Icon, { name: 'edit', size: 12 })),
               React.createElement('button', { className: 'btn btn-sm', onClick: () => resetPw(u), title: t('users.resetpw') }, React.createElement(Icon, { name: 'lock', size: 12 })),
               React.createElement('button', { className: 'btn btn-sm', onClick: () => toggle(u.id) }, u.status === 'A' ? t('f.inactive') : t('f.active')),
-              React.createElement('button', { className: 'btn btn-sm btn-icon', onClick: () => del(u), title: t('btn.delete') }, React.createElement(Icon, { name: 'trash', size: 12, style: { color: 'var(--danger)' } })))))))) ),
+              canDelete && React.createElement('button', { className: 'btn btn-sm btn-icon', onClick: () => del(u), title: t('btn.delete') }, React.createElement(Icon, { name: 'trash', size: 12, style: { color: 'var(--danger)' } })))))))) ),
       modal && React.createElement(UserModal, { state, t, lang, edit: modal.mode === 'edit' ? modal.user : null, onClose: () => setModal(null), onSubmit: save }));
   }
 

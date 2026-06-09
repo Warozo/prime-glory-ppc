@@ -8,7 +8,7 @@
   const e = React.createElement;
   const STEP_ICONS = { issue: 'box', weigh: 'scale', mix: 'designer', fill: 'fg', seal: 'lock', box2: 'box', wrap: 'layers', carton: 'box', qc: 'checkcircle', label: 'items', box: 'box', blend: 'designer', shrink: 'layers' };
 
-  function Designer({ state, setState }) {
+  function Designer({ state, setState, canDelete }) {
     const { t, lang } = useI18n();
     const toast = useToast();
     const [tplId, setTplId] = React.useState(state.workflows[0].id);
@@ -96,7 +96,7 @@
             e('div', { style: { flex: 1, minWidth: 0, cursor: 'pointer' }, onClick: () => loadTpl(w.id) },
               e('div', { style: { fontSize: 12, fontWeight: 600 } }, w.name),
               e('div', { className: 'faint mono', style: { fontSize: 10, marginTop: 2 } }, w.steps.length + ' ' + (lang === 'th' ? 'ขั้นตอน' : 'steps') + (w.line ? ' · Line ' + w.line : ''))),
-            e('button', { className: 'btn btn-sm btn-ghost btn-icon', title: t('btn.delete'), onClick: (ev) => { ev.stopPropagation(); delTemplate(w.id); } }, e(Icon, { name: 'trash', size: 12, style: { color: 'var(--danger)' } }))))),
+            canDelete && e('button', { className: 'btn btn-sm btn-ghost btn-icon', title: t('btn.delete'), onClick: (ev) => { ev.stopPropagation(); delTemplate(w.id); } }, e(Icon, { name: 'trash', size: 12, style: { color: 'var(--danger)' } }))))),
         e('button', { className: 'btn btn-sm', style: { marginTop: 4 }, onClick: () => { setSteps([]); setTplName(lang === 'th' ? 'เทมเพลตใหม่' : 'New Template'); setTplId('new'); } },
           e(Icon, { name: 'plus', size: 13 }), t('btn.new'))));
 
@@ -115,7 +115,7 @@
             e('div', { style: { minWidth: 0, flex: 1 } },
               e('div', { style: { fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, lang === 'th' ? s.nameTh : s.name),
               e('div', { className: 'faint', style: { fontSize: 9.5 } }, s.dur + (lang === 'th' ? ' ชม.' : 'h'))),
-            e('button', { className: 'btn btn-sm btn-ghost btn-icon', draggable: false, title: t('btn.delete'),
+            canDelete && e('button', { className: 'btn btn-sm btn-ghost btn-icon', draggable: false, title: t('btn.delete'),
               onMouseDown: (ev) => ev.stopPropagation(),
               onClick: (ev) => { ev.stopPropagation(); delStep(s.key); },
               style: { marginLeft: 'auto', flexShrink: 0 } }, e(Icon, { name: 'trash', size: 12, style: { color: 'var(--danger)' } }))))));
