@@ -49,8 +49,16 @@
     const [u, setU] = React.useState('admin');
     const [p, setP] = React.useState('');
     const [err, setErr] = React.useState('');
-    const submit = () => {
-      const users = window.PG_DATA.buildState().users;
+    const [busy, setBusy] = React.useState(false);
+    const submit = async () => {
+      if (busy) return;
+      setBusy(true); setErr('');
+      // Authenticate against the live shared snapshot (so users added later
+      // via User Management can sign in), falling back to the seed offline.
+      let users;
+      try { const st = await window.PG_DATA.loadState(); users = (st && st.users) || []; }
+      catch (e) { users = window.PG_DATA.buildState().users; }
+      setBusy(false);
       const found = users.find(x => x.username === u.trim() && x.password === p);
       if (!found) { setErr(lang === 'th' ? 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' : 'Invalid username or password'); return; }
       if (found.status !== 'A') { setErr(lang === 'th' ? 'บัญชีถูกปิดใช้งาน' : 'Account is inactive'); return; }
@@ -80,7 +88,7 @@
             React.createElement('label', null, t('f.password')),
             React.createElement('input', { className: 'input', type: 'password', value: p, onChange: e => { setP(e.target.value); setErr(''); }, onKeyDown: e => { if (e.key === 'Enter') submit(); } })),
           err && React.createElement('div', { style: { fontSize: 11.5, color: 'var(--danger)', marginBottom: 14, display: 'flex', gap: 6, alignItems: 'center' } }, React.createElement(Icon, { name: 'alert', size: 13 }), err),
-          React.createElement('button', { className: 'btn btn-pri', style: { width: '100%', height: 38 }, onClick: submit }, t('btn.login'), React.createElement(Icon, { name: 'arrowR', size: 15 })))));
+          React.createElement('button', { className: 'btn btn-pri', style: { width: '100%', height: 38 }, disabled: busy, onClick: submit }, busy ? (lang === 'th' ? 'กำลังตรวจสอบ…' : 'Checking…') : t('btn.login'), React.createElement(Icon, { name: 'arrowR', size: 15 })))));
   }
 
   function LangToggle({ lang, setLang }) {

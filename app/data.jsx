@@ -131,13 +131,9 @@
   // Finished-goods stock — empty; filled when lots complete and pass QC
   const FG_STOCK = [];
 
+  // Only the admin account is seeded; other users are added via User Management
   const USERS = [
-    { id: 'U01', username: 'somchai.p', name: 'Somchai Phan', email: 'somchai@primeglory.co', role: 'ppc', status: 'A', last: d(0), password: 'ppc123' },
-    { id: 'U02', username: 'admin', name: 'System Admin', email: 'admin@primeglory.co', role: 'admin', status: 'A', last: d(0), password: 'prime888' },
-    { id: 'U03', username: 'nina.w', name: 'Nina Wong', email: 'nina@primeglory.co', role: 'warehouse', status: 'A', last: d(0), password: 'wh123' },
-    { id: 'U04', username: 'arthit.s', name: 'Arthit Suk', email: 'arthit@primeglory.co', role: 'production', status: 'A', last: d(-1), password: 'prod123' },
-    { id: 'U05', username: 'pim.k', name: 'Pim Kanya', email: 'pim@primeglory.co', role: 'management', status: 'A', last: d(0), password: 'mgmt123' },
-    { id: 'U06', username: 'lek.t', name: 'Lek Thong', email: 'lek@primeglory.co', role: 'production', status: 'I', last: d(-30), password: 'prod456' },
+    { id: 'U01', username: 'admin', name: 'System Admin', email: 'admin@primeglory.co', role: 'admin', status: 'A', last: d(0), password: 'prime888' },
   ];
 
   // Dashboard analytics
