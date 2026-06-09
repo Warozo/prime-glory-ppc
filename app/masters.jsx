@@ -249,14 +249,14 @@
   }
 
   function OrderModal({ state, t, lang, onClose, onSubmit }) {
-    const [f, setF] = React.useState({ id: '', customer: state.customers[0], fg: state.fg[0].code, qty: '', due: state.today, priority: 'med' });
+    const [f, setF] = React.useState({ id: '', customer: '', fg: state.fg[0].code, qty: '', due: state.today, priority: 'med' });
     const set = (k, v) => setF(p => ({ ...p, [k]: v }));
     return React.createElement(Modal, { title: t('btn.new') + ' · ' + t('nav.orders'), onClose, width: 520,
       footer: React.createElement(React.Fragment, null, React.createElement('button', { className: 'btn', onClick: onClose }, t('btn.cancel')),
-        React.createElement('button', { className: 'btn btn-pri', disabled: !f.qty || !f.id.trim(), onClick: () => onSubmit(f) }, t('btn.save'))) },
+        React.createElement('button', { className: 'btn btn-pri', disabled: !f.qty || !f.id.trim() || !f.customer.trim(), onClick: () => onSubmit(f) }, t('btn.save'))) },
       React.createElement('div', { className: 'grid g-2', style: { gap: 12 } },
         React.createElement('div', { style: { gridColumn: 'span 2' } }, React.createElement(Field, { label: t('f.order'), required: true, hint: lang === 'th' ? 'กรอกเลขที่เอง เช่น SO-2496' : 'Enter your own number, e.g. SO-2496' }, React.createElement('input', { className: 'input mono', value: f.id, onChange: e => set('id', e.target.value), placeholder: 'SO-____' }))),
-        React.createElement(Field, { label: t('f.customer'), required: true }, React.createElement('select', { className: 'select', value: f.customer, onChange: e => set('customer', e.target.value) }, state.customers.map(c => React.createElement('option', { key: c }, c)))),
+        React.createElement(Field, { label: t('f.customer'), required: true }, React.createElement('input', { className: 'input', value: f.customer, onChange: e => set('customer', e.target.value), placeholder: lang === 'th' ? 'ชื่อลูกค้า' : 'Customer name' })),
         React.createElement(Field, { label: t('f.product'), required: true }, React.createElement('select', { className: 'select', value: f.fg, onChange: e => set('fg', e.target.value) }, state.fg.map(x => React.createElement('option', { key: x.code, value: x.code }, lang === 'th' ? x.nameTh : x.name)))),
         React.createElement(Field, { label: t('f.qty'), required: true }, React.createElement('input', { className: 'input mono', type: 'number', value: f.qty, onChange: e => set('qty', e.target.value), placeholder: '0' })),
         React.createElement(Field, { label: t('f.duedate'), required: true }, React.createElement(DateField, { value: f.due, onChange: v => set('due', v) })),

@@ -16,14 +16,18 @@
   ];
   const NAV_LABEL = { dashboard: 'nav.dashboard', orders: 'nav.orders', flow: 'nav.flow', schedule: 'nav.schedule', designer: 'nav.designer', shopfloor: 'nav.shopfloor', receiving: 'nav.receiving', issue: 'nav.issue', fgreceiving: 'nav.fgreceiving', fgsales: 'nav.fgsales', stock: 'nav.stock', items: 'nav.items', bom: 'nav.bom', settings: 'nav.settings', users: 'nav.users' };
 
+  // Everything except User Management — shared by PPC and Management
+  const ALL_BUT_USERS = ['dashboard', 'orders', 'flow', 'schedule', 'designer', 'shopfloor', 'receiving', 'issue', 'fgreceiving', 'fgsales', 'stock', 'items', 'bom', 'settings'];
   const PERMS = {
-    admin: 'all',
-    ppc: ['dashboard', 'orders', 'flow', 'schedule', 'designer', 'shopfloor', 'receiving', 'issue', 'fgreceiving', 'fgsales', 'stock', 'items', 'bom', 'settings'],
-    management: ['dashboard', 'flow', 'schedule', 'shopfloor', 'stock', 'fgreceiving', 'fgsales'],
-    warehouse: ['dashboard', 'receiving', 'issue', 'fgreceiving', 'fgsales', 'stock', 'items'],
-    production: ['dashboard', 'flow', 'schedule', 'designer', 'shopfloor'],
+    admin: 'all',                                                       // เห็นทั้งหมด
+    ppc: ALL_BUT_USERS,                                                 // ทั้งหมด ยกเว้นจัดการผู้ใช้งาน
+    management: ALL_BUT_USERS,                                          // ทั้งหมด ยกเว้นจัดการผู้ใช้งาน
+    warehouse: ['receiving', 'issue', 'fgreceiving', 'fgsales', 'stock'], // เฉพาะคลังสินค้า
+    production: ['dashboard', 'schedule', 'designer', 'shopfloor'],     // เฉพาะการผลิต
   };
   function allowed(role, key) { const p = PERMS[role]; return p === 'all' || p.includes(key); }
+  // First page a role is allowed to see — used as its landing/default route
+  function firstAllowed(role) { const p = PERMS[role]; return p === 'all' ? 'dashboard' : (p[0] || 'dashboard'); }
 
   const ROUTES = {
     dashboard: (p) => React.createElement(window.PG_Dashboard, p),
@@ -109,7 +113,7 @@
 
   /* ---------------- Shell ---------------- */
   function Shell({ tweaks, setTweak, lang, setLang, onLogout }) {
-    const [route, setRoute] = React.useState('dashboard');
+    const [route, setRoute] = React.useState(() => firstAllowed(tweaks.role));
     const [state, setStateRaw] = React.useState(null);
     const t = (k, v) => tr(lang, k, v);
     const role = tweaks.role;
@@ -132,7 +136,7 @@
       return () => { mounted = false; unsub(); };
     }, []);
 
-    React.useEffect(() => { if (!allowed(role, route)) setRoute('dashboard'); }, [role]);
+    React.useEffect(() => { if (!allowed(role, route)) setRoute(firstAllowed(role)); }, [role]);
 
     const go = (r) => { if (allowed(role, r)) setRoute(r); };
     React.useEffect(() => { window.__pgGo = go; });
@@ -181,7 +185,7 @@
           React.createElement('button', { className: 'tb-icon-btn', title: t('btn.login'), onClick: onLogout }, React.createElement(Icon, { name: 'logout', size: 16 })),
           React.createElement(RoleSwitch, { role, setRole: (r) => setTweak('role', r), lang })),
         React.createElement('main', { className: 'content' },
-          (ROUTES[route] || ROUTES.dashboard)(props))));
+          (ROUTES[allowed(role, route) ? route : firstAllowed(role)] || ROUTES.dashboard)(props))));
   }
 
   /* ---------------- Root ---------------- */

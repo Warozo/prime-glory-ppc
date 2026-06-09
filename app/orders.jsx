@@ -40,6 +40,39 @@
     }
     function prev_po(s, oid) { return s.prodOrders.find(p => p.order === oid); }
 
+    // Cancel a reservation while the order has NOT yet started production
+    // (status still 'reserved'). Releases any outstanding reservation, returns
+    // every already-issued lot back to stock, drops the issue records and the
+    // production order, and sends the order back to 'waiting'.
+    function cancelReservation(o) {
+      if (!window.confirm(lang === 'th' ? 'ยกเลิกการจอง และคืนวัตถุดิบที่เบิกไปแล้วทั้งหมด?' : 'Cancel reservation and return all issued materials?')) return;
+      setState(prev => {
+        const next = { ...prev };
+        const poRec = prev.prodOrders.find(p => p.order === o.id);
+        const reserved = { ...(prev.reservedByRm || {}) };
+        // release the outstanding reservation only if nothing was issued yet
+        if (poRec && poRec.status === 'reserved') {
+          D.bomRequirement(prev, o.fg, o.qty).forEach(r => { reserved[r.rm] = +(Math.max(0, (reserved[r.rm] || 0) - r.need).toFixed(2)); });
+        }
+        // return physically-issued stock to its lots and drop those issue txns
+        const lots = prev.lots.map(l => ({ ...l }));
+        const keep = [];
+        (prev.issues || []).forEach(tx => {
+          const belongs = (tx.order && tx.order === o.id) || (poRec && tx.ref && tx.ref === poRec.id);
+          if (belongs) { const lot = lots.find(l => l.lot === tx.lot && l.rm === tx.rm); if (lot) lot.remaining = +(lot.remaining + tx.qty).toFixed(2); }
+          else keep.push(tx);
+        });
+        next.lots = lots;
+        next.reservedByRm = reserved;
+        next.issues = keep;
+        next.prodOrders = prev.prodOrders.filter(p => p.order !== o.id);
+        next.orders = prev.orders.map(x => x.id === o.id ? { ...x, status: 'waiting' } : x);
+        return next;
+      });
+      setSel(null);
+      toast(lang === 'th' ? 'ยกเลิกการจองและคืนวัตถุดิบเรียบร้อย' : 'Reservation cancelled and materials returned', 'warn');
+    }
+
     function del(o) {
       // only deletable before reservation (request / waiting)
       if (o.status !== 'request' && o.status !== 'waiting') return;
@@ -93,7 +126,7 @@
               items.map(o => React.createElement(OrderCard, { key: o.id, o, state, lang, onClick: () => setSel(o.id), onDelete: (o.status === 'request' || o.status === 'waiting') ? () => del(o) : null }))));
         })),
 
-      order && React.createElement(OrderDetail, { order, state, setState, t, lang, onClose: () => setSel(null), onAdvance: requestAdvance, onBack: back, go }),
+      order && React.createElement(OrderDetail, { order, state, setState, t, lang, onClose: () => setSel(null), onAdvance: requestAdvance, onBack: back, onCancelReserve: cancelReservation, go }),
       poNaming && React.createElement(PoNameModal, { order: poNaming, state, t, lang,
         onClose: () => setPoNaming(null),
         onSubmit: (poId) => { const o = poNaming; setPoNaming(null); advance(o, poId); } }));
@@ -138,12 +171,13 @@
         React.createElement(Icon, { name: 'alert', size: 11 }), shortCount + ' ' + t('f.shortage'))));
   }
 
-  function OrderDetail({ order, state, setState, t, lang, onClose, onAdvance, onBack, go }) {
+  function OrderDetail({ order, state, setState, t, lang, onClose, onAdvance, onBack, onCancelReserve, go }) {
     // For orders already past reservation, materials are already secured — don't recompute shortage
     const committed = order.status === 'reserved' || order.status === 'scheduled' || order.status === 'completed';
     const req = D.bomRequirement(state, order.fg, order.qty, committed);
     const hasShort = req.some(r => r.short > 0);
-    const canBack = order.status === 'waiting' || order.status === 'reserved';
+    const canBack = order.status === 'waiting';        // step back to request (no stock involved)
+    const canCancel = order.status === 'reserved';     // cancel reservation + return issued stock
     const bom = state.boms[order.fg];
     const nx = NEXT[order.status];
 
@@ -152,6 +186,8 @@
         React.createElement('button', { className: 'btn', onClick: onClose }, t('btn.close')),
         canBack && React.createElement('button', { className: 'btn', style: { marginRight: 'auto' }, onClick: () => onBack(order) },
           React.createElement(Icon, { name: 'chevL', size: 14 }), t('btn.back')),
+        canCancel && React.createElement('button', { className: 'btn', style: { marginRight: 'auto', color: 'var(--danger)', borderColor: 'var(--danger)' }, onClick: () => onCancelReserve(order) },
+          React.createElement(Icon, { name: 'trash', size: 14 }), lang === 'th' ? 'ยกเลิกจอง' : 'Cancel reservation'),
         order.status === 'scheduled' || order.status === 'reserved'
           ? React.createElement('button', { className: 'btn btn-pri', onClick: () => go('schedule') },
             React.createElement(Icon, { name: 'schedule', size: 14 }), t('nav.schedule')) :

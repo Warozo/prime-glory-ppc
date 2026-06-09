@@ -67,16 +67,16 @@
   }
 
   function ReceiveModal({ state, t, lang, onClose, onSubmit }) {
-    const [f, setF] = React.useState({ recv: state.today, supplier: state.suppliers[0], rm: state.raw[0].code, qty: '', lot: '', expiry: '' });
+    const [f, setF] = React.useState({ recv: state.today, supplier: '', rm: state.raw[0].code, qty: '', lot: '', expiry: '' });
     const set = (k, v) => setF(p => ({ ...p, [k]: v }));
-    const valid = f.qty && f.lot && f.expiry;
+    const valid = f.qty && f.lot && f.expiry && f.supplier.trim();
     return React.createElement(Modal, { title: t('wh.recv.title'), onClose, width: 540,
       footer: React.createElement(React.Fragment, null,
         React.createElement('button', { className: 'btn', onClick: onClose }, t('btn.cancel')),
         React.createElement('button', { className: 'btn btn-pri', disabled: !valid, onClick: () => onSubmit(f) }, React.createElement(Icon, { name: 'check', size: 14 }), t('btn.receive'))) },
       React.createElement('div', { className: 'grid g-2', style: { gap: 12 } },
         React.createElement(Field, { label: t('f.date'), required: true }, React.createElement(DateField, { value: f.recv, onChange: v => set('recv', v) })),
-        React.createElement(Field, { label: t('f.supplier'), required: true }, React.createElement('select', { className: 'select', value: f.supplier, onChange: e => set('supplier', e.target.value) }, state.suppliers.map(s => React.createElement('option', { key: s }, s)))),
+        React.createElement(Field, { label: t('f.supplier'), required: true }, React.createElement('input', { className: 'input', value: f.supplier, onChange: e => set('supplier', e.target.value), placeholder: lang === 'th' ? 'ชื่อผู้ขาย' : 'Supplier name' })),
         React.createElement('div', { style: { gridColumn: 'span 2' } }, React.createElement(Field, { label: t('rawmat'), required: true },
           React.createElement('select', { className: 'select', value: f.rm, onChange: e => set('rm', e.target.value) },
             state.raw.map(r => React.createElement('option', { key: r.code, value: r.code }, r.code + ' · ' + (lang === 'th' ? r.nameTh : r.name) + ' (' + r.unit + ')'))))),
