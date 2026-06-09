@@ -121,11 +121,46 @@
           r === role && React.createElement(Icon, { name: 'check', size: 14, style: { marginLeft: 'auto', color: 'var(--primary)' } })))));
   }
 
-  /* Default mock state for dashboard */
+  /* Default mock state for dashboard - complete with all properties */
   const DEFAULT_STATE = {
-    steps: [], materials: [], finished_goods: [], lines: [], workflows: [], users: MOCK_USERS, orders: [], schedules: [],
-    customers: [], stock: [], chartData: { production: { labels: ['Mon','Tue','Wed','Thu','Fri'], data: [450, 520, 480, 610, 550] }, efficiency: { labels: ['L01','L02'], data: [92, 88] } },
-    kpis: { ordersTotal: 0, ordersScheduled: 0, completionRate: 78, avgLeadTime: 4.2 }, gantt: { start: '2026-06-01', end: '2026-06-30', lines: [], orders: [] }
+    steps: [
+      { key: 'issue', name: 'Material Issue', nameTh: 'เบิกวัตถุดิบ', dur: 1, ic: 'box' },
+      { key: 'weigh', name: 'Weighing', nameTh: 'ชั่งวัตถุดิบ', dur: 1, ic: 'scale' },
+      { key: 'mix', name: 'Mixing', nameTh: 'ผสม', dur: 3, ic: 'blend' },
+      { key: 'fill', name: 'Filling', nameTh: 'บรรจุ', dur: 2, ic: 'fill' },
+      { key: 'seal', name: 'Sealing', nameTh: 'ซีล', dur: 1, ic: 'seal' },
+      { key: 'qc', name: 'QC', nameTh: 'ตรวจสอบ', dur: 1, ic: 'qc' },
+      { key: 'label', name: 'Labeling', nameTh: 'ติดฉลาก', dur: 1, ic: 'label' },
+      { key: 'box', name: 'Boxing', nameTh: 'ใส่กล่อง', dur: 1, ic: 'box2' }
+    ],
+    materials: [
+      { code: 'RM001', name: 'Rose Base', nameTh: 'เบสน้ำกุหลาบ', unit: 'kg', cat: 'Base', status: 'A' },
+      { code: 'RM002', name: 'Hyaluronic Acid', nameTh: 'ไฮยาลูรอนิค', unit: 'kg', cat: 'Active', status: 'A' }
+    ],
+    finished_goods: [
+      { code: 'FG001', name: 'Rose Serum 5g', nameTh: 'โรสเซรั่ม 5g', unit: 'pcs', cat: 'Serum', status: 'A' },
+      { code: 'FG002', name: 'Vitamin C Serum', nameTh: 'เซรั่มวิตามินซี', unit: 'pcs', cat: 'Serum', status: 'A' }
+    ],
+    lines: [
+      { id: 'L01', name: 'Line 1 - Serum', manpower: 5, dailyCap: 500 },
+      { id: 'L02', name: 'Line 2 - Foundation', manpower: 6, dailyCap: 400 }
+    ],
+    workflows: [],
+    users: MOCK_USERS,
+    orders: [],
+    schedules: [],
+    customers: [
+      { id: '1', code: 'C001', name: 'Cosmetics Express', phone: '02-123-4567' },
+      { id: '2', code: 'C002', name: 'Beauty Plus', phone: '02-234-5678' }
+    ],
+    stock: [],
+    chartData: {
+      production: { labels: ['Mon','Tue','Wed','Thu','Fri'], data: [450, 520, 480, 610, 550] },
+      efficiency: { labels: ['L01','L02'], data: [92, 88] },
+      materials: { labels: ['Active', 'Base', 'Packaging'], data: [35, 40, 25] }
+    },
+    kpis: { ordersTotal: 0, ordersScheduled: 0, completionRate: 78, avgLeadTime: 4.2 },
+    gantt: { start: '2026-06-01', end: '2026-06-30', lines: [], orders: [] }
   };
 
   /* ---------------- Shell ---------------- */
