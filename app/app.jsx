@@ -43,6 +43,15 @@
     users: (p) => React.createElement(window.PG_Users, p),
   };
 
+  /* Mock users for auth (fallback when Supabase unavailable) */
+  const MOCK_USERS = [
+    { username: 'admin', password: 'prime888', role: 'admin', status: 'A', fullName: 'Administrator' },
+    { username: 'ppc001', password: 'ppc123', role: 'ppc', status: 'A', fullName: 'PPC Planner' },
+    { username: 'warehouse', password: 'wh123', role: 'warehouse', status: 'A', fullName: 'Warehouse Manager' },
+    { username: 'production', password: 'prod123', role: 'production', status: 'A', fullName: 'Production Manager' },
+    { username: 'management', password: 'mgmt123', role: 'management', status: 'A', fullName: 'Management' },
+  ];
+
   /* ---------------- Login ---------------- */
   function Login({ lang, setLang, onLogin }) {
     const t = (k) => tr(lang, k);
@@ -50,8 +59,7 @@
     const [p, setP] = React.useState('');
     const [err, setErr] = React.useState('');
     const submit = () => {
-      const users = window.PG_DATA.buildState().users;
-      const found = users.find(x => x.username === u.trim() && x.password === p);
+      const found = MOCK_USERS.find(x => x.username === u.trim() && x.password === p);
       if (!found) { setErr(lang === 'th' ? 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' : 'Invalid username or password'); return; }
       if (found.status !== 'A') { setErr(lang === 'th' ? 'บัญชีถูกปิดใช้งาน' : 'Account is inactive'); return; }
       onLogin(found.role);
