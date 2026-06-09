@@ -4,7 +4,7 @@
    ============================================================ */
 (function () {
   const { useI18n } = window.PG_I18N;
-  const { Card, PageHead, Icon, fmt, fmtDate, Modal, Field, StatusBadge, PriorityBadge, useToast, Progress } = window.PG_UI;
+  const { Card, PageHead, Icon, fmt, fmtDate, DateField, Modal, Field, StatusBadge, PriorityBadge, useToast, Progress } = window.PG_UI;
   const D = window.PG_DATA;
 
   const FLOW = ['request', 'waiting', 'reserved', 'scheduled', 'completed'];
@@ -260,7 +260,44 @@
       hasShort && order.status === 'waiting' && React.createElement('div', { style: { marginTop: 10, fontSize: 11.5, color: 'var(--text-muted)', display: 'flex', gap: 8, alignItems: 'center' } },
         React.createElement(Icon, { name: 'alert', size: 14, style: { color: 'var(--warn)' } }),
         lang === 'th' ? 'ต้องรับเข้าวัตถุดิบที่ขาดก่อนจึงจะจองและเปิดใบสั่งผลิตได้' : 'Receive the shortage materials before reserving and creating the PO.',
-        React.createElement('button', { className: 'btn btn-sm', style: { marginLeft: 'auto' }, onClick: () => go('receiving') }, t('nav.receiving'))));
+        React.createElement('button', { className: 'btn btn-sm', style: { marginLeft: 'auto' }, onClick: () => go('receiving') }, t('nav.receiving'))),
+
+      // Procurement tracking for the short materials (editable any time while waiting)
+      hasShort && order.status === 'waiting' && React.createElement(ProcurementPanel, { order, state, setState, t, lang, shorts: req.filter(r => r.short > 0) }));
+  }
+
+  // Editable status + expected-arrival per short material; persisted to state.procurement
+  function ProcurementPanel({ order, state, setState, t, lang, shorts }) {
+    const PROC = D.PROC_STATUS;
+    const COLORS = { pending: ['var(--text-muted)', 'var(--surface-3)'], ordered: ['var(--st-scheduled)', 'var(--primary-tint)'], transit: ['var(--warn)', 'var(--warn-tint)'] };
+    const proc = (state.procurement && state.procurement[order.id]) || {};
+    function setProc(rm, patch) {
+      setState(prev => {
+        const procurement = { ...(prev.procurement || {}) };
+        const forOrder = { ...(procurement[order.id] || {}) };
+        forOrder[rm] = { status: 'pending', eta: '', ...(forOrder[rm] || {}), ...patch };
+        procurement[order.id] = forOrder;
+        return { ...prev, procurement };
+      });
+    }
+    return React.createElement('div', { style: { marginTop: 16 } },
+      React.createElement('h3', { style: { margin: '0 0 8px', fontSize: 13 } }, lang === 'th' ? 'สถานะการจัดหาวัตถุดิบที่ขาด' : 'Procurement status of short materials'),
+      React.createElement('div', { style: { border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' } },
+        React.createElement('table', { className: 'tbl' },
+          React.createElement('thead', null, React.createElement('tr', null,
+            React.createElement('th', null, t('rawmat')),
+            React.createElement('th', { className: 'num' }, t('f.shortage')),
+            React.createElement('th', { style: { width: 160 } }, lang === 'th' ? 'สถานะจัดหา' : 'Status'),
+            React.createElement('th', { style: { width: 170 } }, lang === 'th' ? 'วันคาดว่าจะมา' : 'Expected arrival'))),
+          React.createElement('tbody', null, shorts.map(r => {
+            const p = proc[r.rm] || { status: 'pending', eta: '' };
+            return React.createElement('tr', { key: r.rm },
+              React.createElement('td', null, React.createElement('div', { style: { fontWeight: 600 } }, D.rmName(state, r.rm, lang)), React.createElement('div', { className: 'mono faint', style: { fontSize: 10 } }, r.rm)),
+              React.createElement('td', { className: 'num mono', style: { color: 'var(--danger)', fontWeight: 700 } }, '-' + fmt(r.short) + ' ' + r.unit),
+              React.createElement('td', null, React.createElement('select', { className: 'select', value: p.status, onChange: e => setProc(r.rm, { status: e.target.value }), style: { color: (COLORS[p.status] || [])[0] } },
+                Object.keys(PROC).map(k => React.createElement('option', { key: k, value: k }, lang === 'th' ? PROC[k].th : PROC[k].en)))),
+              React.createElement('td', null, React.createElement(DateField, { value: p.eta || '', onChange: v => setProc(r.rm, { eta: v }) })));
+          })))));
   }
 
   window.PG_OrderFlow = OrderFlow;

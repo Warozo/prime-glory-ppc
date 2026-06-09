@@ -24,6 +24,15 @@
     }).sort((x, y) => new Date(x.expiry) - new Date(y.expiry));
     const fgTotal = s.fgStock.reduce((a2, x) => a2 + x.qty, 0);
 
+    // Orders still waiting on materials, with each short material's procurement status + ETA
+    const waitMat = s.orders.filter(o => o.status === 'waiting').map(o => {
+      const shorts = D.bomRequirement(s, o.fg, o.qty).filter(r => r.short > 0).map(r => {
+        const p = (s.procurement && s.procurement[o.id] && s.procurement[o.id][r.rm]) || { status: 'pending', eta: '' };
+        return { rm: r.rm, short: r.short, unit: r.unit, status: p.status, eta: p.eta };
+      });
+      return { id: o.id, customer: o.customer, fg: o.fg, shorts };
+    }).filter(o => o.shorts.length > 0);
+
     const hasOutput = false; // (daily output now handled by DailyOutputPanel below)
 
     return React.createElement('div', null,
@@ -35,6 +44,35 @@
         React.createElement(Stat, { label: t('db.waiting'), value: waiting, accent: 'var(--st-waiting)', icon: 'alert', foot: t('flow.shortage') }),
         React.createElement(Stat, { label: t('db.scheduled'), value: scheduled, accent: 'var(--st-scheduled)', icon: 'schedule', foot: t('nav.schedule') }),
         React.createElement(Stat, { label: t('db.completedmonth'), value: completedMonth, accent: 'var(--st-completed)', icon: 'checkcircle', foot: fmtDate(s.today) })),
+
+      // Orders waiting for materials — name, material, status, expected arrival
+      React.createElement('div', { style: { marginBottom: 'var(--gap)' } },
+        React.createElement(Card, { title: lang === 'th' ? 'ใบสั่งผลิตรอวัตถุดิบ' : 'Orders waiting for materials', icon: 'alert',
+          actions: React.createElement('span', { className: 'badge', style: { color: 'var(--st-waiting)', background: 'var(--warn-tint)' } }, waitMat.length) },
+          waitMat.length === 0
+            ? React.createElement('div', { className: 'faint', style: { fontSize: 12 } }, lang === 'th' ? 'ไม่มีใบสั่งผลิตที่รอวัตถุดิบ' : 'No orders waiting for materials')
+            : React.createElement('table', { className: 'tbl' },
+              React.createElement('thead', null, React.createElement('tr', null,
+                React.createElement('th', null, lang === 'th' ? 'ใบสั่งผลิต' : 'Order'),
+                React.createElement('th', null, t('f.product')),
+                React.createElement('th', null, lang === 'th' ? 'วัตถุดิบที่รอ' : 'Material'),
+                React.createElement('th', { className: 'num' }, t('f.shortage')),
+                React.createElement('th', null, lang === 'th' ? 'สถานะ' : 'Status'),
+                React.createElement('th', null, lang === 'th' ? 'วันคาดการณ์' : 'Expected'))),
+              React.createElement('tbody', null, waitMat.reduce((rows, o) => {
+                o.shorts.forEach((sh, j) => {
+                  const st = D.PROC_STATUS[sh.status] || D.PROC_STATUS.pending;
+                  const c = { pending: ['var(--text-muted)', 'var(--surface-3)'], ordered: ['var(--st-scheduled)', 'var(--primary-tint)'], transit: ['var(--warn)', 'var(--warn-tint)'] }[sh.status] || ['var(--text-muted)', 'var(--surface-3)'];
+                  rows.push(React.createElement('tr', { key: o.id + '_' + sh.rm, className: 'clickrow', style: { cursor: 'pointer' }, onClick: () => go('flow') },
+                    j === 0 ? React.createElement('td', { rowSpan: o.shorts.length, style: { verticalAlign: 'top' } }, React.createElement('div', { className: 'mono', style: { fontWeight: 700, color: 'var(--primary)' } }, o.id), React.createElement('div', { className: 'faint', style: { fontSize: 10.5 } }, o.customer)) : null,
+                    j === 0 ? React.createElement('td', { rowSpan: o.shorts.length, style: { verticalAlign: 'top', fontWeight: 600 } }, D.fgName(s, o.fg, lang)) : null,
+                    React.createElement('td', null, React.createElement('div', { style: { fontWeight: 600 } }, D.rmName(s, sh.rm, lang)), React.createElement('div', { className: 'mono faint', style: { fontSize: 10 } }, sh.rm)),
+                    React.createElement('td', { className: 'num mono', style: { color: 'var(--danger)', fontWeight: 700 } }, '-' + fmt(sh.short) + ' ' + sh.unit),
+                    React.createElement('td', null, React.createElement('span', { className: 'badge', style: { color: c[0], background: c[1] } }, lang === 'th' ? st.th : st.en)),
+                    React.createElement('td', { className: 'mono faint' }, sh.eta ? fmtDate(sh.eta) : '—')));
+                });
+                return rows;
+              }, []))))),
 
       // Daily output by line — compact line chart + filterable table
       React.createElement('div', { style: { marginBottom: 'var(--gap)' } },

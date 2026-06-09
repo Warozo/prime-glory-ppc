@@ -172,10 +172,17 @@
       raw: RAW, fg: FG, boms: BOMS, customers: CUSTOMERS, suppliers: SUPPLIERS,
       lines: LINES, workflows: WORKFLOWS, orders: ORDERS, lots: LOTS, receipts: RECEIPTS,
       lotsWip: [], prodOrders: PRODORDERS, fgPending: FG_PENDING, fgStock: FG_STOCK, fgSales: [],
-      reservedByRm: {}, scheduleBars: [], issues: [],
+      reservedByRm: {}, scheduleBars: [], issues: [], procurement: {},
       users: USERS, analytics: ANALYTICS, stepLib: STEP_LIB, today: d(0),
     }));
   }
+
+  // Procurement status for short materials of a waiting order
+  const PROC_STATUS = {
+    pending: { th: 'รอสั่งซื้อ', en: 'To order' },
+    ordered: { th: 'สั่งซื้อแล้ว', en: 'Ordered' },
+    transit: { th: 'กำลังขนส่ง', en: 'In transit' },
+  };
 
   // helpers shared across modules
   function fgName(s, code, lang) { const f = s.fg.find(x => x.code === code); return f ? (lang === 'th' ? f.nameTh : f.name) : code; }
@@ -276,5 +283,5 @@
     return function () { try { _supa.removeChannel(ch); } catch (e) {} };
   }
 
-  window.PG_DATA = { buildState, loadState, saveState, subscribe, genId, fgName, rmName, rmOnHand, rmLotsFEFO, rmReserved, rmAvailable, rmUnit, fgOnHand, bomRequirement, workflowForLine, buildWipLot, STEP_LIB };
+  window.PG_DATA = { buildState, loadState, saveState, subscribe, genId, fgName, rmName, rmOnHand, rmLotsFEFO, rmReserved, rmAvailable, rmUnit, fgOnHand, bomRequirement, workflowForLine, buildWipLot, STEP_LIB, PROC_STATUS };
 })();
