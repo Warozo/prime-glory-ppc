@@ -1,8 +1,16 @@
 /* ============================================================
-   Mock data store — Prime Glory cosmetics manufacturing
-   buildState() returns a fresh mutable world for React state.
+   Data store — Prime Glory cosmetics manufacturing
+   buildState() seeds a fresh world; loadState/saveState/subscribe
+   persist & sync the whole snapshot via Supabase (realtime).
    ============================================================ */
 (function () {
+  /* ---- Supabase client (shared persistence backend) ---- */
+  const SUPABASE_URL = 'https://onucjibwifwajzizlshv.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_jR8yyCqOQgAgKfac3TvTmw_APJ3u3ws';
+  let _supa = null;
+  try { if (window.supabase) _supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY); }
+  catch (e) { console.warn('Supabase init failed; running in-memory only', e); }
+  const CLIENT_ID = Math.random().toString(36).slice(2) + Date.now().toString(36);
   const STEP_LIB = [
     { key: 'issue',   name: 'Material Issue',    nameTh: 'เบิกวัตถุดิบ',     dur: 1, ic: 'box' },
     { key: 'weigh',   name: 'Material Weighing', nameTh: 'ชั่งวัตถุดิบ',      dur: 1, ic: 'scale' },
@@ -247,5 +255,49 @@
 
   function fgOnHand(s, code) { return s.fgStock.filter(x => x.fg === code).reduce((a, x) => a + x.qty, 0); }
 
-  window.PG_DATA = { buildState, genId, fgName, rmName, rmOnHand, rmLotsFEFO, rmReserved, rmAvailable, rmUnit, fgOnHand, bomRequirement, workflowForLine, buildWipLot, STEP_LIB };
+  /* ---- Persistence: whole-state snapshot in Supabase (id='main') ---- */
+  // Load the shared snapshot; seed it on first run. 'today' is always refreshed
+  // to the real current date so countdowns stay live even on an old snapshot.
+  async function loadState() {
+    if (!_supa) return buildState();
+    try {
+      const { data, error } = await _supa.from('app_state').select('data').eq('id', 'main').maybeSingle();
+      if (error) { console.warn('loadState:', error.message); return buildState(); }
+      if (!data) {
+        const seed = buildState();
+        await _supa.from('app_state').upsert({ id: 'main', data: seed, client_id: CLIENT_ID, updated_at: new Date().toISOString() });
+        return seed;
+      }
+      const st = data.data; st.today = d(0); return st;
+    } catch (e) { console.warn('loadState error:', e); return buildState(); }
+  }
+
+  // Debounced upsert of the full snapshot. Tagged with CLIENT_ID so this tab
+  // can ignore the realtime echo of its own write.
+  let _saveTimer = null, _pending = null;
+  function saveState(state) {
+    if (!_supa) return;
+    _pending = state;
+    clearTimeout(_saveTimer);
+    _saveTimer = setTimeout(() => {
+      _supa.from('app_state')
+        .upsert({ id: 'main', data: _pending, client_id: CLIENT_ID, updated_at: new Date().toISOString() })
+        .then(({ error }) => { if (error) console.warn('saveState:', error.message); });
+    }, 300);
+  }
+
+  // Subscribe to remote changes (other tabs / other users). Ignores our own writes.
+  function subscribe(onRemote) {
+    if (!_supa) return function () {};
+    const ch = _supa.channel('app_state_main')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_state', filter: 'id=eq.main' }, function (payload) {
+        const row = payload.new;
+        if (!row || row.client_id === CLIENT_ID) return;
+        const st = row.data; st.today = d(0); onRemote(st);
+      })
+      .subscribe();
+    return function () { try { _supa.removeChannel(ch); } catch (e) {} };
+  }
+
+  window.PG_DATA = { buildState, loadState, saveState, subscribe, genId, fgName, rmName, rmOnHand, rmLotsFEFO, rmReserved, rmAvailable, rmUnit, fgOnHand, bomRequirement, workflowForLine, buildWipLot, STEP_LIB };
 })();

@@ -25,7 +25,15 @@
       "Bash(git commit -m 'Expand DEFAULT_STATE with complete mock data *)",
       "Bash(git commit -m 'Add home dashboard with module navigation *)",
       "Bash(gh pr create --title 'Deploy Prime Glory PPC System to Vercel' --body ' *)",
-      "Bash(git commit -m 'Restore original working prototype \\(revert broken Supabase rewrite\\) *)"
+      "Bash(git commit -m 'Restore original working prototype \\(revert broken Supabase rewrite\\) *)",
+      "Bash(git commit -m 'Remove login credential hint and disable role switcher *)",
+      "Bash(cd \"C:\\\\Users\\\\01\" && find . -maxdepth 4 -type f \\\\\\( -iname \"*.jpg\" -o -iname \"*.jpeg\" -o -iname \"*.png\" \\\\\\) -newermt \"2026-06-09 11:00\" 2>/dev/null | grep -iv \"node_modules\\\\|design_extract\\\\|AppData/Local/Microsoft\" | head -30)",
+      "Bash(ls -la Prime1* prime1*)",
+      "Bash(find . -maxdepth 1 -iname \"prime1*\")",
+      "Bash(cd \"C:\\\\Users\\\\01\\\\Desktop\\\\Claude\\\\PPC\" && cp \"C:\\\\Users\\\\01\\\\Downloads\\\\Prime1.png\" \"app/login-bg.png\" && ls -la app/login-bg.png)",
+      "Bash(git commit -m 'Use Prime Glory building photo as login background *)",
+      "Bash(git commit -m 'Base all dates on the real current date instead of a fixed date *)",
+      "Bash(git commit -m 'Persist app state to Supabase with realtime cross-tab/user sync *)"
     ]
   }
 }

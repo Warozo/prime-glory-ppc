@@ -102,16 +102,38 @@
   /* ---------------- Shell ---------------- */
   function Shell({ tweaks, setTweak, lang, setLang, onLogout }) {
     const [route, setRoute] = React.useState('dashboard');
-    const [state, setState] = React.useState(() => D.buildState());
+    const [state, setStateRaw] = React.useState(null);
     const t = (k, v) => tr(lang, k, v);
     const role = tweaks.role;
+
+    // setState passed to modules: update React state AND persist the snapshot.
+    const setState = React.useCallback((updater) => {
+      setStateRaw(prev => {
+        const next = typeof updater === 'function' ? updater(prev) : updater;
+        D.saveState(next);
+        return next;
+      });
+    }, []);
+
+    // Load shared snapshot from Supabase, then subscribe to remote changes
+    // (other tabs / other users) and apply them locally without re-saving.
+    React.useEffect(() => {
+      let mounted = true;
+      D.loadState().then(s => { if (mounted) setStateRaw(s); });
+      const unsub = D.subscribe(remote => { if (mounted) setStateRaw(remote); });
+      return () => { mounted = false; unsub(); };
+    }, []);
 
     React.useEffect(() => { if (!allowed(role, route)) setRoute('dashboard'); }, [role]);
 
     const go = (r) => { if (allowed(role, r)) setRoute(r); };
     React.useEffect(() => { window.__pgGo = go; });
+
+    if (!state) return React.createElement('div', { style: { display: 'grid', placeItems: 'center', height: '100vh', background: 'var(--bg)', color: 'var(--text-muted)', fontSize: 14 } },
+      lang === 'th' ? 'กำลังโหลดข้อมูลจากเซิร์ฟเวอร์…' : 'Loading data from server…');
+
     const props = { state, setState, go };
-    const waitingCount = state.orders.filter(o => o.status === 'waiting').length;
+    const waitingCount = (state.orders || []).filter(o => o.status === 'waiting').length;
 
     const curLabel = t(NAV_LABEL[route] || 'nav.dashboard');
     const curSec = (NAV.find(s => s.items.some(i => i.k === route)) || {}).sec;
