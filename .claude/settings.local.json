@@ -13,7 +13,8 @@
       "Bash(git init *)",
       "Bash(git config *)",
       "Bash(git add *)",
-      "Bash(git commit -m 'Initial commit: Prime Glory PPC System with Supabase integration *)"
+      "Bash(git commit -m 'Initial commit: Prime Glory PPC System with Supabase integration *)",
+      "Bash(git commit -m 'Add documentation: README, DEPLOYMENT guide *)"
     ]
   }
 }
