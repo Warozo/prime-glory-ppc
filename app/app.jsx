@@ -215,7 +215,23 @@
           React.createElement('button', { className: 'tb-icon-btn', title: t('btn.login'), onClick: onLogout }, React.createElement(Icon, { name: 'logout', size: 16 })),
           React.createElement(RoleSwitch, { role, setRole: (r) => setTweak('role', r), lang })),
         React.createElement('main', { className: 'content' },
-          (ROUTES[route] || ROUTES.dashboard)(props))));
+          React.createElement('div', { style: { padding: '40px', textAlign: 'center' } },
+            React.createElement('h1', { style: { fontSize: '28px', marginBottom: '20px' } }, 'Prime Glory PPC System'),
+            React.createElement('p', { style: { fontSize: '16px', color: 'var(--text-muted)', marginBottom: '40px' } }, 'Manufacturing Operations Platform'),
+            React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', maxWidth: '1000px', margin: '0 auto' } },
+              React.createElement('div', { style: { padding: '20px', background: 'var(--surface-2)', borderRadius: '8px' } },
+                React.createElement('h3', null, '📊 Dashboard'),
+                React.createElement('p', { style: { color: 'var(--text-faint)', marginTop: '10px' } }, 'View KPIs and production metrics'),
+                React.createElement('button', { onClick: () => go('dashboard'), style: { marginTop: '10px', padding: '8px 16px', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' } }, 'Open')),
+              React.createElement('div', { style: { padding: '20px', background: 'var(--surface-2)', borderRadius: '8px' } },
+                React.createElement('h3', null, '📝 Orders'),
+                React.createElement('p', { style: { color: 'var(--text-faint)', marginTop: '10px' } }, 'Manage customer orders'),
+                React.createElement('button', { onClick: () => go('orders'), style: { marginTop: '10px', padding: '8px 16px', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' } }, 'Open')),
+              React.createElement('div', { style: { padding: '20px', background: 'var(--surface-2)', borderRadius: '8px' } },
+                React.createElement('h3', null, '⏱️ Scheduling'),
+                React.createElement('p', { style: { color: 'var(--text-faint)', marginTop: '10px' } }, 'Production schedule (Gantt)'),
+                React.createElement('button', { onClick: () => go('schedule'), style: { marginTop: '10px', padding: '8px 16px', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' } }, 'Open'))
+            )))));
   }
 
   /* ---------------- Root ---------------- */
