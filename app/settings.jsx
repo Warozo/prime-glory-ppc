@@ -10,7 +10,7 @@
   const LINE_IDS = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
   const LINE_COLORS = { A: '#2d5bd7', B: '#7b5cd9', C: '#1f8a5b', D: '#e08a1e', E: '#cf3b3b', F: '#0e7490', G: '#9333ea' };
 
-  function Settings({ state, setState, go }) {
+  function Settings({ state, setState, go, canDelete }) {
     const { t, lang } = useI18n();
     const toast = useToast();
     const [edit, setEdit] = React.useState(null); // line being edited or {id:null} for new
@@ -69,7 +69,7 @@
                 e('td', null, wf ? e('span', { className: 'badge badge-soft', style: { fontSize: 10 } }, wf.name) : e('span', { className: 'faint', style: { fontSize: 11 } }, '—')),
                 e('td', null, e('div', { className: 'row', style: { gap: 4, justifyContent: 'flex-end' } },
                   e('button', { className: 'btn btn-sm btn-ghost btn-icon', onClick: () => setEdit({ ...l, wf: l.wf || (wf ? wf.id : '') }) }, e(Icon, { name: 'edit', size: 13 })),
-                  e('button', { className: 'btn btn-sm btn-ghost btn-icon', onClick: () => removeLine(l.id) }, e(Icon, { name: 'trash', size: 13, style: { color: 'var(--danger)' } })))));
+                  canDelete && e('button', { className: 'btn btn-sm btn-ghost btn-icon', onClick: () => removeLine(l.id) }, e(Icon, { name: 'trash', size: 13, style: { color: 'var(--danger)' } })))));
             }))),
           e('div', { style: { padding: '9px 14px', borderTop: '1px solid var(--border)', fontSize: 10.5, color: 'var(--text-faint)', display: 'flex', gap: 6, alignItems: 'center' } },
             e(Icon, { name: 'alert', size: 12 }), t('set.planhint'))),
