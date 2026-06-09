@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Prime Glory PPC · คู่มือสร้างจริง & Deploy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#eaeef4; --surface:#fff; --surface-2:#f6f8fb; --ink:#16203a; --muted:#586173; --faint:#8a94a6;
+    --navy:#122038; --navy-2:#1b2e4d; --primary:#2d5bd7; --primary-tint:#e7eefc; --border:#dde3ec;
+    --ok:#1f8a5b; --ok-tint:#e3f3eb; --warn:#e08a1e; --warn-tint:#fbeed7; --code-bg:#0f1c31;
+    --r:10px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans Thai',system-ui,sans-serif;line-height:1.65;font-size:15px;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  .wrap{max-width:920px;margin:0 auto;padding:0 24px 100px;}
+
+  /* Hero */
+  .hero{background:linear-gradient(150deg,var(--navy-2),#0f1c31);color:#fff;padding:54px 0 46px;margin-bottom:38px;position:relative;overflow:hidden;}
+  .hero::after{content:"";position:absolute;inset:0;opacity:.07;background:repeating-linear-gradient(45deg,#fff 0 1px,transparent 1px 24px);}
+  .hero .wrap{position:relative;}
+  .brand{display:flex;align-items:center;gap:13px;margin-bottom:26px;}
+  .logo{width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,#4f7bf0,#2d5bd7);display:grid;place-items:center;font-weight:700;font-size:18px;box-shadow:0 4px 16px rgba(45,91,215,.5);}
+  .brand b{font-size:17px;font-weight:600;display:block;}
+  .brand span{font-size:12px;color:#aebbcf;}
+  .hero h1{margin:0 0 12px;font-size:33px;font-weight:700;letter-spacing:-.4px;line-height:1.25;}
+  .hero p{margin:0;font-size:15px;color:#c3cee0;max-width:620px;}
+  .hero .meta{margin-top:24px;display:flex;gap:10px;flex-wrap:wrap;}
+  .chip{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16);border-radius:30px;padding:6px 14px;font-size:12.5px;color:#dde7f5;}
+
+  h2{font-size:23px;font-weight:700;margin:46px 0 6px;letter-spacing:-.3px;display:flex;align-items:center;gap:12px;}
+  h2 .n{width:30px;height:30px;flex-shrink:0;background:var(--primary);color:#fff;border-radius:8px;display:grid;place-items:center;font-size:15px;}
+  h2 + .sub{color:var(--muted);margin:0 0 20px 42px;font-size:14px;}
+  h3{font-size:16px;font-weight:600;margin:26px 0 10px;}
+
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:22px 24px;margin:16px 0;box-shadow:0 1px 2px rgba(20,35,64,.05);}
+  .card.flush{padding:0;overflow:hidden;}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  th{text-align:left;background:var(--surface-2);color:var(--faint);font-size:11px;text-transform:uppercase;letter-spacing:.5px;font-weight:600;padding:10px 14px;border-bottom:1px solid var(--border);}
+  td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:top;}
+  tr:last-child td{border-bottom:none;}
+  td b{font-weight:600;}
+
+  .free{display:inline-block;background:var(--ok-tint);color:var(--ok);font-size:11px;font-weight:600;border-radius:20px;padding:2px 9px;}
+  .pill{display:inline-block;background:var(--primary-tint);color:var(--primary);font-size:11px;font-weight:600;border-radius:20px;padding:2px 9px;}
+
+  pre{background:var(--code-bg);color:#dbe6f5;border-radius:9px;padding:18px 20px;overflow-x:auto;font-family:'IBM Plex Mono',monospace;font-size:12.5px;line-height:1.6;margin:14px 0;}
+  pre .k{color:#7eb6ff;} pre .s{color:#9fe0a6;} pre .c{color:#6f7f99;font-style:italic;} pre .f{color:#e0b25b;}
+  code.inl{background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:1px 6px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--primary);}
+
+  .flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:16px 0;}
+  .flow .box{background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:9px 13px;font-size:12.5px;font-weight:600;text-align:center;}
+  .flow .box small{display:block;font-weight:400;color:var(--faint);font-size:10.5px;margin-top:1px;}
+  .flow .ar{color:var(--faint);font-weight:700;}
+
+  .step{display:flex;gap:15px;padding:16px 0;border-bottom:1px solid var(--border);}
+  .step:last-child{border-bottom:none;}
+  .step .num{flex-shrink:0;width:30px;height:30px;border-radius:50%;background:var(--navy);color:#fff;display:grid;place-items:center;font-weight:700;font-size:13px;}
+  .step h4{margin:2px 0 4px;font-size:15px;font-weight:600;}
+  .step p{margin:0 0 8px;color:var(--muted);font-size:13.5px;}
+  .prompt{background:var(--navy);border-radius:9px;padding:13px 15px;color:#dbe6f5;font-size:12.5px;line-height:1.55;position:relative;}
+  .prompt::before{content:"PROMPT สำหรับ AI";position:absolute;top:-9px;left:13px;background:var(--primary);color:#fff;font-size:9px;font-weight:700;letter-spacing:.6px;padding:2px 8px;border-radius:20px;}
+  .prompt span{color:#7eb6ff;}
+
+  .note{background:var(--warn-tint);border:1px solid color-mix(in srgb,var(--warn) 30%,white);border-radius:9px;padding:13px 16px;font-size:13.5px;display:flex;gap:11px;margin:16px 0;}
+  .note b{color:#9a5d12;}
+  .ok-note{background:var(--ok-tint);border:1px solid color-mix(in srgb,var(--ok) 28%,white);border-radius:9px;padding:13px 16px;font-size:13.5px;display:flex;gap:11px;margin:16px 0;}
+  .ic{flex-shrink:0;width:18px;height:18px;margin-top:1px;}
+
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  @media(max-width:680px){.two{grid-template-columns:1fr;} .hero h1{font-size:26px;}}
+  ul.tight{margin:8px 0;padding-left:20px;} ul.tight li{margin:5px 0;}
+  .toc{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:18px 22px;margin:-18px 0 0;box-shadow:0 1px 2px rgba(20,35,64,.05);}
+  .toc b{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--faint);}
+  .toc ol{margin:10px 0 0;padding-left:20px;columns:2;font-size:13.5px;}
+  .toc li{margin:4px 0;}
+  .toc a{color:var(--ink);text-decoration:none;}
+  .toc a:hover{color:var(--primary);}
+  footer{text-align:center;color:var(--faint);font-size:12px;margin-top:50px;}
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="wrap">
+    <div class="brand">
+      <div class="logo">PG</div>
+      <div><b>Prime Glory</b><span>ระบบวางแผนและควบคุมการผลิต (PPC)</span></div>
+    </div>
+    <h1>คู่มือสร้างระบบจริง & Deploy</h1>
+    <p>แปลงต้นแบบ (prototype) เป็นระบบที่ใช้งานได้จริง บนเครื่องมือฟรี — สร้างต่อด้วย AI โดยไม่ต้องมีทีมพัฒนา รองรับครบทุกโมดูล</p>
+    <div class="meta">
+      <span class="chip">React + Vite</span>
+      <span class="chip">Supabase (PostgreSQL + Auth)</span>
+      <span class="chip">Cloudflare Pages / Netlify</span>
+      <span class="chip">ฟรีทั้งหมด</span>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <div class="toc">
+    <b>สารบัญ</b>
+    <ol>
+      <li><a href="#arch">ภาพรวมสถาปัตยกรรม</a></li>
+      <li><a href="#stack">Tech Stack & ค่าใช้จ่าย</a></li>
+      <li><a href="#db">โครงสร้างฐานข้อมูล (SQL)</a></li>
+      <li><a href="#auth">ระบบล็อกอิน & สิทธิ์ (RLS)</a></li>
+      <li><a href="#logic">Business Logic (SQL Functions)</a></li>
+      <li><a href="#roadmap">แผนสร้างด้วย AI (ทีละเฟส)</a></li>
+      <li><a href="#deploy">ขั้นตอน Deploy</a></li>
+      <li><a href="#limits">ข้อจำกัด Free Tier & ก้าวต่อไป</a></li>
+    </ol>
+  </div>
+
+  <!-- 1 ARCH -->
+  <h2 id="arch"><span class="n">1</span> ภาพรวมสถาปัตยกรรม</h2>
+  <p class="sub">หลักการ: ยกงานหนัก (ฐานข้อมูล, ล็อกอิน, สิทธิ์, logic) ไปไว้ที่ Supabase เพื่อให้ฝั่งหน้าเว็บเบาและ AI ดูแลต่อง่าย</p>
+  <div class="card">
+    <div class="flow">
+      <div class="box">ผู้ใช้ (เบราว์เซอร์)<small>พนักงานโรงงาน</small></div>
+      <span class="ar">→</span>
+      <div class="box">Frontend<small>React + Vite</small></div>
+      <span class="ar">→</span>
+      <div class="box">Supabase<small>API + Auth</small></div>
+      <span class="ar">→</span>
+      <div class="box">PostgreSQL<small>ข้อมูลจริง</small></div>
+    </div>
+    <p style="margin:6px 0 0;color:var(--muted);font-size:13.5px;">หน้าเว็บ (build เป็นไฟล์ static) วางบน Cloudflare Pages/Netlify — เรียกข้อมูลผ่าน Supabase client library โดยตรง ไม่ต้องมี server กลางที่ต้องดูแลเอง business logic ที่ซับซ้อน (จองของ/เบิก FIFO/ปิดล็อต) เขียนเป็น <b>SQL Function</b> ใน Supabase แล้วเรียกผ่าน <code class="inl">rpc()</code></p>
+  </div>
+  <div class="ok-note">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="#1f8a5b" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14M22 4L12 14.01l-3-3"/></svg>
+    <div>ทำไมถึงเหมาะกับคุณ: <b>ไม่มีทีม dev</b> → Supabase สร้าง API ให้อัตโนมัติจากตาราง · <b>ใช้ AI ต่อ</b> → AI เข้าใจ React + Supabase ดีมาก · <b>เน้นฟรี</b> → ทุกชิ้นมี free tier ที่พอสำหรับ 50–200 คน</div>
+  </div>
+
+  <!-- 2 STACK -->
+  <h2 id="stack"><span class="n">2</span> Tech Stack & ค่าใช้จ่าย</h2>
+  <p class="sub">เลือกจากเงื่อนไข: ฟรีก่อน, AI สร้างต่อได้, deploy ครบทุกโมดูล, ไม่มีระบบเดิม</p>
+  <div class="card flush">
+    <table>
+      <thead><tr><th>ชั้น</th><th>เครื่องมือ</th><th>หน้าที่</th><th>Free tier</th></tr></thead>
+      <tbody>
+        <tr><td><b>Frontend</b></td><td>React + Vite + TypeScript</td><td>หน้าจอทั้งหมด (ต่อยอดจาก UI ปัจจุบัน)</td><td><span class="free">ฟรี · open source</span></td></tr>
+        <tr><td><b>Hosting</b></td><td>Cloudflare Pages <span class="faint">หรือ</span> Netlify</td><td>โฮสต์หน้าเว็บ + HTTPS + โดเมน</td><td><span class="free">ฟรี ไม่จำกัดเว็บ</span></td></tr>
+        <tr><td><b>ฐานข้อมูล</b></td><td>Supabase (PostgreSQL)</td><td>เก็บข้อมูลจริงทุกตาราง</td><td><span class="free">500MB · 2 โปรเจกต์</span></td></tr>
+        <tr><td><b>Auth</b></td><td>Supabase Auth</td><td>ล็อกอิน + อีเมล + JWT</td><td><span class="free">50,000 ผู้ใช้/เดือน</span></td></tr>
+        <tr><td><b>สิทธิ์</b></td><td>Row Level Security (RLS)</td><td>คุมสิทธิ์ตาม role ระดับแถวข้อมูล</td><td><span class="free">ในตัว Postgres</span></td></tr>
+        <tr><td><b>Logic</b></td><td>Postgres Functions (RPC)</td><td>จอง/เบิก/ปิดล็อต แบบ transaction</td><td><span class="free">ในตัว</span></td></tr>
+        <tr><td><b>UI kit</b></td><td>คงของเดิม (CSS tokens)</td><td>ดีไซน์ navy/blue ที่มีอยู่แล้ว</td><td><span class="free">ฟรี</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="#e08a1e" stroke-width="2"><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4m0 4h.01"/></svg>
+    <div><b>เครื่องมือ AI ที่ใช้สร้างต่อ:</b> ใช้ตัวที่แก้โค้ดในโปรเจกต์จริงได้ เช่น <b>Cursor</b>, <b>Claude Code</b>, หรือ <b>GitHub Copilot</b> — ป้อน prompt ในเฟสที่ 6 ทีละขั้น (อย่าสั่งให้สร้างทั้งระบบในครั้งเดียว)</div>
+  </div>
+
+  <!-- 3 DB -->
+  <h2 id="db"><span class="n">3</span> โครงสร้างฐานข้อมูล</h2>
+  <p class="sub">วางตารางตามโมดูลที่มีอยู่ — เปิด Supabase → SQL Editor → วางโค้ดนี้รันทีเดียว</p>
+
+  <h3>3.1 ข้อมูลหลัก (Master Data)</h3>
+  <pre><span class="c">-- สินค้า: วัตถุดิบ (rm) และสินค้าสำเร็จรูป (fg) รวมในตารางเดียว</span>
+<span class="k">create table</span> items (
+  code        text <span class="k">primary key</span>,
+  type        text <span class="k">not null check</span> (type <span class="k">in</span> (<span class="s">'rm'</span>,<span class="s">'fg'</span>)),
+  name_th     text <span class="k">not null</span>,
+  name_en     text,
+  unit        text <span class="k">not null</span>,
+  category    text,
+  status      text <span class="k">default</span> <span class="s">'active'</span>,
+  created_at  timestamptz <span class="k">default</span> now()
+);
+
+<span class="k">create table</span> customers ( id bigint <span class="k">generated always as identity primary key</span>, name text <span class="k">not null</span> );
+<span class="k">create table</span> suppliers ( id bigint <span class="k">generated always as identity primary key</span>, name text <span class="k">not null</span> );
+
+<span class="k">create table</span> production_lines (
+  id text <span class="k">primary key</span>, name text <span class="k">not null</span>, manpower int, daily_cap int
+);
+
+<span class="c">-- BOM (สูตรการผลิต) — 1 fg : หลายบรรทัดวัตถุดิบ</span>
+<span class="k">create table</span> boms (
+  id bigint <span class="k">generated always as identity primary key</span>,
+  fg_code text <span class="k">references</span> items(code), version text, active boolean <span class="k">default</span> true
+);
+<span class="k">create table</span> bom_lines (
+  id bigint <span class="k">generated always as identity primary key</span>,
+  bom_id bigint <span class="k">references</span> boms(id) <span class="k">on delete cascade</span>,
+  rm_code text <span class="k">references</span> items(code), qty numeric <span class="k">not null</span>, unit text
+);
+
+<span class="c">-- เทมเพลตกระบวนการผลิต (workflow) + ขั้นตอน</span>
+<span class="k">create table</span> workflows (
+  id text <span class="k">primary key</span>, name text, line_id text <span class="k">references</span> production_lines(id)
+);
+<span class="k">create table</span> workflow_steps (
+  id bigint <span class="k">generated always as identity primary key</span>,
+  workflow_id text <span class="k">references</span> workflows(id) <span class="k">on delete cascade</span>,
+  step_key text, name_th text, name_en text, seq int, duration_h numeric
+);</pre>
+
+  <h3>3.2 ออเดอร์ & การผลิต</h3>
+  <pre><span class="c">-- คำสั่งซื้อลูกค้า → ความต้องการผลิต (สถานะ 5 ขั้น)</span>
+<span class="k">create table</span> orders (
+  id text <span class="k">primary key</span>,                <span class="c">-- เช่น SO-2452</span>
+  customer_id bigint <span class="k">references</span> customers(id),
+  fg_code text <span class="k">references</span> items(code),
+  qty int <span class="k">not null</span>,
+  due_date date,
+  priority text <span class="k">default</span> <span class="s">'med'</span>,
+  status text <span class="k">default</span> <span class="s">'request'</span>
+    <span class="k">check</span> (status <span class="k">in</span> (<span class="s">'request'</span>,<span class="s">'waiting'</span>,<span class="s">'reserved'</span>,<span class="s">'scheduled'</span>,<span class="s">'completed'</span>)),
+  created_at timestamptz <span class="k">default</span> now()
+);
+
+<span class="c">-- ใบสั่งผลิต (เปิดเมื่อจองวัตถุดิบสำเร็จ)</span>
+<span class="k">create table</span> production_orders (
+  id text <span class="k">primary key</span>,                <span class="c">-- เช่น PO-7781</span>
+  order_id text <span class="k">references</span> orders(id),
+  fg_code text <span class="k">references</span> items(code),
+  qty int, line_id text <span class="k">references</span> production_lines(id),
+  workflow_id text <span class="k">references</span> workflows(id),
+  start_date date, days int,
+  status text <span class="k">default</span> <span class="s">'reserved'</span>
+    <span class="k">check</span> (status <span class="k">in</span> (<span class="s">'reserved'</span>,<span class="s">'scheduled'</span>,<span class="s">'inprogress'</span>,<span class="s">'completed'</span>))
+);
+
+<span class="c">-- การจองวัตถุดิบต่อออเดอร์</span>
+<span class="k">create table</span> reservations (
+  id bigint <span class="k">generated always as identity primary key</span>,
+  order_id text <span class="k">references</span> orders(id),
+  rm_code text <span class="k">references</span> items(code),
+  qty_required numeric, qty_reserved numeric <span class="k">default</span> 0
+);</pre>
+
+  <h3>3.3 คลังวัตถุดิบ & WIP & สินค้าสำเร็จรูป</h3>
+  <pre><span class="c">-- ล็อตวัตถุดิบ (FIFO ตามวันหมดอายุ) — remaining = คงเหลือจริง</span>
+<span class="k">create table</span> lots (
+  id bigint <span class="k">generated always as identity primary key</span>,
+  rm_code text <span class="k">references</span> items(code),
+  supplier_id bigint <span class="k">references</span> suppliers(id),
+  qty numeric, remaining numeric, lot_no text,
+  expiry date, received_at date <span class="k">default</span> now()
+);
+<span class="k">create table</span> material_receipts (
+  id bigint <span class="k">generated always as identity primary key</span>,
+  supplier_id bigint, rm_code text, qty numeric, lot_no text, expiry date,
+  received_at timestamptz <span class="k">default</span> now()
+);
+<span class="k">create table</span> material_issues (
+  id bigint <span class="k">generated always as identity primary key</span>,
+  production_order_id text, rm_code text, lot_id bigint, qty numeric,
+  reason text, issued_at timestamptz <span class="k">default</span> now()
+);
+
+<span class="c">-- งานระหว่างผลิตต่อสถานี (cum_out = ผลผลิตสะสมที่สถานีนั้น)</span>
+<span class="k">create table</span> wip_stations (
+  id bigint <span class="k">generated always as identity primary key</span>,
+  production_order_id text <span class="k">references</span> production_orders(id),
+  step_key text, seq int, cum_out numeric <span class="k">default</span> 0
+);
+<span class="k">create table</span> output_logs (
+  id bigint <span class="k">generated always as identity primary key</span>,
+  production_order_id text, step_key text, qty numeric,
+  logged_at timestamptz <span class="k">default</span> now()
+);
+
+<span class="c">-- สินค้าสำเร็จรูป: รอ QC → เข้าคลัง</span>
+<span class="k">create table</span> fg_receipts (
+  id bigint <span class="k">generated always as identity primary key</span>,
+  production_order_id text, fg_code text, qty int, lot_no text,
+  status text <span class="k">default</span> <span class="s">'pending'</span>
+    <span class="k">check</span> (status <span class="k">in</span> (<span class="s">'pending'</span>,<span class="s">'accepted'</span>,<span class="s">'rejected'</span>)),
+  completed_at timestamptz <span class="k">default</span> now()
+);
+<span class="k">create table</span> fg_stock (
+  id bigint <span class="k">generated always as identity primary key</span>,
+  fg_code text <span class="k">references</span> items(code), lot_no text, qty int, expiry date
+);</pre>
+
+  <!-- 4 AUTH -->
+  <h2 id="auth"><span class="n">4</span> ระบบล็อกอิน & สิทธิ์ (RLS)</h2>
+  <p class="sub">Supabase Auth จัดการล็อกอิน — เราเพิ่มตาราง profiles เก็บ role แล้วใช้ Row Level Security คุมสิทธิ์</p>
+  <pre><span class="c">-- โปรไฟล์ผู้ใช้ ผูกกับระบบ auth ของ Supabase</span>
+<span class="k">create table</span> profiles (
+  id uuid <span class="k">primary key references</span> auth.users(id) <span class="k">on delete cascade</span>,
+  full_name text, email text,
+  role text <span class="k">default</span> <span class="s">'production'</span>
+    <span class="k">check</span> (role <span class="k">in</span> (<span class="s">'admin'</span>,<span class="s">'ppc'</span>,<span class="s">'warehouse'</span>,<span class="s">'production'</span>,<span class="s">'management'</span>)),
+  status text <span class="k">default</span> <span class="s">'active'</span>
+);
+
+<span class="c">-- helper: อ่าน role ของผู้ใช้ปัจจุบัน</span>
+<span class="k">create function</span> my_role() <span class="k">returns</span> text <span class="k">language</span> sql <span class="k">stable as</span> $$
+  <span class="k">select</span> role <span class="k">from</span> profiles <span class="k">where</span> id = auth.uid()
+$$;
+
+<span class="c">-- เปิด RLS แล้วตั้ง policy (ตัวอย่าง: ตาราง orders)</span>
+<span class="k">alter table</span> orders <span class="k">enable row level security</span>;
+
+<span class="c">-- ทุกคนที่ล็อกอินอ่านได้</span>
+<span class="k">create policy</span> <span class="s">"orders_read"</span> <span class="k">on</span> orders <span class="k">for select</span>
+  <span class="k">using</span> (auth.uid() <span class="k">is not null</span>);
+
+<span class="c">-- เฉพาะ ppc/admin แก้ไขออเดอร์ได้</span>
+<span class="k">create policy</span> <span class="s">"orders_write"</span> <span class="k">on</span> orders <span class="k">for all</span>
+  <span class="k">using</span> (my_role() <span class="k">in</span> (<span class="s">'ppc'</span>,<span class="s">'admin'</span>))
+  <span class="k">with check</span> (my_role() <span class="k">in</span> (<span class="s">'ppc'</span>,<span class="s">'admin'</span>));</pre>
+  <div class="card">
+    <h3 style="margin-top:0;">ตารางสิทธิ์ตาม role (ใช้เป็นแนวเขียน policy แต่ละตาราง)</h3>
+    <table>
+      <thead><tr><th>โมดูล</th><th>admin</th><th>ppc</th><th>warehouse</th><th>production</th><th>management</th></tr></thead>
+      <tbody>
+        <tr><td>ออเดอร์/จอง/ตาราง</td><td>✏️</td><td>✏️</td><td>👁️</td><td>👁️</td><td>👁️</td></tr>
+        <tr><td>รับเข้า/เบิกวัตถุดิบ</td><td>✏️</td><td>✏️</td><td>✏️</td><td>—</td><td>👁️</td></tr>
+        <tr><td>WIP/รายงานผลผลิต</td><td>✏️</td><td>👁️</td><td>—</td><td>✏️</td><td>👁️</td></tr>
+        <tr><td>QC/รับเข้า FG</td><td>✏️</td><td>✏️</td><td>✏️</td><td>👁️</td><td>👁️</td></tr>
+        <tr><td>ข้อมูลหลัก/ผู้ใช้</td><td>✏️</td><td>👁️</td><td>—</td><td>—</td><td>—</td></tr>
+      </tbody>
+    </table>
+    <p style="margin:10px 0 0;font-size:12.5px;color:var(--faint);">✏️ แก้ไขได้ · 👁️ ดูได้ · — ไม่เห็น</p>
+  </div>
+
+  <!-- 5 LOGIC -->
+  <h2 id="logic"><span class="n">5</span> Business Logic (SQL Functions)</h2>
+  <p class="sub">logic สำคัญต้องอยู่ฝั่ง server เพื่อกันข้อมูลพัง — เขียนเป็น function แล้วเรียกจากหน้าเว็บด้วย <code class="inl">supabase.rpc('ชื่อ', {...})</code></p>
+  <pre><span class="c">-- จองวัตถุดิบ: เช็ค BOM กับสต็อก ถ้าครบ → สร้าง reservations + เลื่อนสถานะ</span>
+<span class="k">create function</span> reserve_materials(p_order text)
+<span class="k">returns</span> text <span class="k">language</span> plpgsql <span class="k">as</span> $$
+<span class="k">declare</span> shortage int;
+<span class="k">begin</span>
+  <span class="c">-- มีวัตถุดิบขาดไหม (need = qty * bom_line.qty เทียบ remaining รวม)</span>
+  <span class="k">select</span> count(*) <span class="k">into</span> shortage <span class="k">from</span> (
+    <span class="k">select</span> bl.rm_code,
+      sum(bl.qty) * o.qty <span class="k">as</span> need,
+      coalesce((<span class="k">select</span> sum(remaining) <span class="k">from</span> lots <span class="k">where</span> rm_code=bl.rm_code),0) <span class="k">as</span> oh
+    <span class="k">from</span> orders o
+    <span class="k">join</span> boms b <span class="k">on</span> b.fg_code=o.fg_code <span class="k">and</span> b.active
+    <span class="k">join</span> bom_lines bl <span class="k">on</span> bl.bom_id=b.id
+    <span class="k">where</span> o.id=p_order <span class="k">group by</span> bl.rm_code, o.qty
+  ) x <span class="k">where</span> need &gt; oh;
+
+  <span class="k">if</span> shortage &gt; 0 <span class="k">then return</span> <span class="s">'SHORTAGE'</span>; <span class="k">end if</span>;
+
+  <span class="k">update</span> orders <span class="k">set</span> status=<span class="s">'reserved'</span> <span class="k">where</span> id=p_order;
+  <span class="c">-- (สร้าง production_order + reservations ที่นี่)</span>
+  <span class="k">return</span> <span class="s">'OK'</span>;
+<span class="k">end</span> $$;
+
+<span class="c">-- เบิกวัตถุดิบตาม BOM แบบ FIFO (หักล็อตที่หมดอายุก่อน)</span>
+<span class="k">create function</span> issue_materials(p_po text)
+<span class="k">returns</span> void <span class="k">language</span> plpgsql <span class="k">as</span> $$
+<span class="k">declare</span> r record; remain numeric; l record;
+<span class="k">begin</span>
+  <span class="k">for</span> r <span class="k">in</span>
+    <span class="k">select</span> bl.rm_code, sum(bl.qty)*po.qty <span class="k">as</span> need
+    <span class="k">from</span> production_orders po
+    <span class="k">join</span> boms b <span class="k">on</span> b.fg_code=po.fg_code <span class="k">and</span> b.active
+    <span class="k">join</span> bom_lines bl <span class="k">on</span> bl.bom_id=b.id
+    <span class="k">where</span> po.id=p_po <span class="k">group by</span> bl.rm_code, po.qty
+  <span class="k">loop</span>
+    remain := r.need;
+    <span class="k">for</span> l <span class="k">in select</span> * <span class="k">from</span> lots
+        <span class="k">where</span> rm_code=r.rm_code <span class="k">and</span> remaining&gt;0 <span class="k">order by</span> expiry <span class="k">loop</span>
+      <span class="k">exit when</span> remain &lt;= 0;
+      <span class="k">update</span> lots <span class="k">set</span> remaining = remaining - least(remaining, remain)
+        <span class="k">where</span> id=l.id;
+      remain := remain - least(l.remaining, remain);
+    <span class="k">end loop</span>;
+  <span class="k">end loop</span>;
+  <span class="k">update</span> production_orders <span class="k">set</span> status=<span class="s">'inprogress'</span> <span class="k">where</span> id=p_po;
+<span class="k">end</span> $$;</pre>
+  <p style="color:var(--muted);font-size:13.5px;">ฟังก์ชันที่เหลือทำแบบเดียวกัน: <code class="inl">report_output(po, step, qty)</code> อัปเดต WIP + ปิดล็อตอัตโนมัติ · <code class="inl">accept_fg(receipt_id)</code> ย้ายเข้า <code class="inl">fg_stock</code> · ป้อน prompt ให้ AI เขียนตามรูปแบบข้างบนได้</p>
+
+  <!-- 6 ROADMAP -->
+  <h2 id="roadmap"><span class="n">6</span> แผนสร้างด้วย AI (ทีละเฟส)</h2>
+  <p class="sub">สั่ง AI ทีละขั้นตามลำดับนี้ — แต่ละเฟสทดสอบให้ผ่านก่อนไปต่อ อย่ารวบสั่งทีเดียว</p>
+  <div class="card flush" style="padding:6px 24px;">
+    <div class="step">
+      <div class="num">1</div>
+      <div>
+        <h4>ตั้งโปรเจกต์ + เชื่อม Supabase</h4>
+        <p>สร้างโปรเจกต์ React และต่อกับ Supabase พร้อมหน้าล็อกอิน</p>
+        <div class="prompt">สร้างโปรเจกต์ <span>Vite + React + TypeScript</span> ติดตั้ง <span>@supabase/supabase-js</span> ตั้งค่า client จาก env var ทำหน้า Login ด้วย Supabase Auth (email/password) และ route guard ให้เข้าได้เมื่อล็อกอินแล้ว</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="num">2</div>
+      <div>
+        <h4>สร้างฐานข้อมูล + Seed</h4>
+        <p>รัน SQL ในหมวด 3–5 บน Supabase แล้วใส่ข้อมูลตัวอย่าง</p>
+        <div class="prompt">ใน Supabase SQL Editor รันสคริปต์สร้างตารางทั้งหมด จากนั้นเขียน <span>seed.sql</span> ใส่ข้อมูลตัวอย่าง: items, BOM ของ Rose Serum 5g, ลูกค้า, สายการผลิต A/B/C และ workflow</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="num">3</div>
+      <div>
+        <h4>ย้าย UI เดิมเข้าโปรเจกต์</h4>
+        <p>นำดีไซน์ navy/blue + i18n ไทย/อังกฤษ + โครงเมนูจากต้นแบบมาใช้</p>
+        <div class="prompt">ใช้ไฟล์ <span>styles.css</span> และ dictionary ไทย/อังกฤษจากต้นแบบ Prime Glory สร้าง layout: sidebar + topbar + ตัวสลับภาษา TH/EN (default ไทย) + ตัวสลับ role</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="num">4</div>
+      <div>
+        <h4>ต่อข้อมูลจริงทีละโมดูล</h4>
+        <p>เริ่มจากอ่านข้อมูล (ตาราง/การ์ด) ก่อนเขียน</p>
+        <div class="prompt">ทำหน้า <span>Item Master</span> และ <span>Customer Orders</span> ให้อ่าน/เพิ่ม/แก้ผ่าน Supabase จริง ใช้ React Query (<span>@tanstack/react-query</span>) จัดการ data fetching และ cache</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="num">5</div>
+      <div>
+        <h4>ต่อ business logic (RPC)</h4>
+        <p>เชื่อมปุ่มจอง/เบิก/รายงานผล/รับเข้า เข้ากับ SQL functions</p>
+        <div class="prompt">เชื่อมปุ่ม "จองวัตถุดิบ" เรียก <span>supabase.rpc('reserve_materials')</span> ถ้าได้ <span>SHORTAGE</span> ให้โชว์วัตถุดิบที่ขาด ทำแบบเดียวกันกับเบิก/รายงานผลผลิต/รับเข้า FG</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="num">6</div>
+      <div>
+        <h4>Realtime + ขัดเกลา</h4>
+        <p>ให้ตัวเลข/แดชบอร์ดอัปเดตสดเมื่อมีคนอื่นแก้</p>
+        <div class="prompt">เปิด Supabase Realtime ให้แดชบอร์ดและ WIP board อัปเดตอัตโนมัติเมื่อข้อมูลเปลี่ยน เพิ่ม loading/empty/error states และ toast แจ้งผล</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7 DEPLOY -->
+  <h2 id="deploy"><span class="n">7</span> ขั้นตอน Deploy</h2>
+  <div class="two">
+    <div class="card">
+      <h3 style="margin-top:0;"><span class="pill">A</span> ขึ้น Cloudflare Pages</h3>
+      <ul class="tight">
+        <li>push โค้ดขึ้น <b>GitHub</b></li>
+        <li>Cloudflare → Pages → เชื่อม repo</li>
+        <li>Build command: <code class="inl">npm run build</code></li>
+        <li>Output: <code class="inl">dist</code></li>
+        <li>ใส่ env: <code class="inl">VITE_SUPABASE_URL</code>, <code class="inl">VITE_SUPABASE_ANON_KEY</code></li>
+        <li>กด Deploy → ได้ลิงก์ <span class="mono">*.pages.dev</span></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0;"><span class="pill">B</span> หรือ Netlify</h3>
+      <ul class="tight">
+        <li>เชื่อม GitHub repo เดียวกัน</li>
+        <li>Build: <code class="inl">npm run build</code> · Publish: <code class="inl">dist</code></li>
+        <li>ใส่ env เหมือนกัน</li>
+        <li>ได้ลิงก์ <span class="mono">*.netlify.app</span></li>
+        <li>ผูกโดเมนตัวเองได้ภายหลัง (ฟรี)</li>
+      </ul>
+    </div>
+  </div>
+  <div class="ok-note">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="#1f8a5b" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14M22 4L12 14.01l-3-3"/></svg>
+    <div><b>Supabase ไม่ต้อง deploy</b> — เป็นบริการ cloud อยู่แล้ว แค่สร้างโปรเจกต์ฟรี แล้วเอา URL + anon key มาใส่ใน env ของหน้าเว็บ ทุกครั้งที่ push GitHub ระบบจะ build + deploy ใหม่อัตโนมัติ</div>
+  </div>
+
+  <!-- 8 LIMITS -->
+  <h2 id="limits"><span class="n">8</span> ข้อจำกัด Free Tier & ก้าวต่อไป</h2>
+  <div class="card flush">
+    <table>
+      <thead><tr><th>เรื่อง</th><th>Free tier</th><th>เมื่อโตขึ้น</th></tr></thead>
+      <tbody>
+        <tr><td>ฐานข้อมูล Supabase</td><td>500MB · พักถ้าไม่ใช้ 7 วัน</td><td>Pro $25/เดือน — 8GB + ไม่พัก + backup รายวัน</td></tr>
+        <tr><td>ผู้ใช้พร้อมกัน</td><td>เพียงพอ 50–200 คน</td><td>อัป Pro เมื่อ traffic สูง</td></tr>
+        <tr><td>Hosting (CF/Netlify)</td><td>ฟรีจริง ไม่จำกัดเว็บ</td><td>ไม่ต้องอัปสำหรับงานนี้</td></tr>
+        <tr><td>Backup</td><td>ต้อง export เอง</td><td>Pro ทำให้อัตโนมัติ</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="#e08a1e" stroke-width="2"><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4m0 4h.01"/></svg>
+    <div><b>ข้อควรระวังก่อนใช้จริงในโรงงาน:</b> (1) ทดสอบ logic จอง/เบิก/ปิดล็อตกับข้อมูลจริงให้ครบ (2) ตั้ง backup อัตโนมัติก่อนพึ่งพาจริง (3) อบรมผู้ใช้แต่ละ role (4) เริ่ม pilot สาย/แผนกเดียวก่อนขยายเต็มโรงงาน</div>
+  </div>
+
+  <footer>
+    Prime Glory PPC · คู่มือสร้างจริง & Deploy · จัดทำเป็นแนวทางพัฒนาต่อ — ปรับแก้ได้ตามจริง
+  </footer>
+
+</div>
+</body>
+</html>

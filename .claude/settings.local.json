@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:api.anthropic.com)",
+      "PowerShell(node --version)",
+      "PowerShell(npm --version)",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "mcp__0d484b61-aa1c-4a01-99e5-9fe2c18fe8a5__list_projects",
+      "mcp__0d484b61-aa1c-4a01-99e5-9fe2c18fe8a5__get_project",
+      "mcp__0d484b61-aa1c-4a01-99e5-9fe2c18fe8a5__list_tables",
+      "mcp__0d484b61-aa1c-4a01-99e5-9fe2c18fe8a5__get_publishable_keys",
+      "mcp__0d484b61-aa1c-4a01-99e5-9fe2c18fe8a5__execute_sql",
+      "Bash(git init *)",
+      "Bash(git config *)",
+      "Bash(git add *)",
+      "Bash(git commit -m 'Initial commit: Prime Glory PPC System with Supabase integration *)"
+    ]
+  }
+}
