@@ -80,8 +80,7 @@
             React.createElement('label', null, t('f.password')),
             React.createElement('input', { className: 'input', type: 'password', value: p, onChange: e => { setP(e.target.value); setErr(''); }, onKeyDown: e => { if (e.key === 'Enter') submit(); } })),
           err && React.createElement('div', { style: { fontSize: 11.5, color: 'var(--danger)', marginBottom: 14, display: 'flex', gap: 6, alignItems: 'center' } }, React.createElement(Icon, { name: 'alert', size: 13 }), err),
-          React.createElement('button', { className: 'btn btn-pri', style: { width: '100%', height: 38 }, onClick: submit }, t('btn.login'), React.createElement(Icon, { name: 'arrowR', size: 15 })),
-          React.createElement('div', { className: 'faint', style: { fontSize: 11, marginTop: 16, textAlign: 'center' } }, lang === 'th' ? 'บัญชีแอดมิน: admin / prime888' : 'Admin: admin / prime888'))));
+          React.createElement('button', { className: 'btn btn-pri', style: { width: '100%', height: 38 }, onClick: submit }, t('btn.login'), React.createElement(Icon, { name: 'arrowR', size: 15 })))));
   }
 
   function LangToggle({ lang, setLang }) {
@@ -93,24 +92,11 @@
   /* ---------------- Role switcher ---------------- */
   function RoleSwitch({ role, setRole, lang }) {
     const t = (k) => tr(lang, k);
-    const [open, setOpen] = React.useState(false);
-    const ref = React.useRef(null);
-    React.useEffect(() => { const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }; document.addEventListener('mousedown', h); return () => document.removeEventListener('mousedown', h); }, []);
-    const ROLES = ['admin', 'ppc', 'warehouse', 'production', 'management'];
     const initials = { admin: 'SA', ppc: 'SP', warehouse: 'NW', production: 'AS', management: 'PK' };
-    return React.createElement('div', { className: 'role-pick', style: { position: 'relative', cursor: 'pointer' }, ref, onClick: () => setOpen(o => !o) },
+    return React.createElement('div', { className: 'role-pick', style: { position: 'relative' } },
       React.createElement('div', { className: 'role-avatar' }, initials[role]),
       React.createElement('div', { className: 'role-meta' },
-        React.createElement('div', { className: 'role-name' }, t('role.' + role).replace(/\s*\(.*\)/, '')),
-        React.createElement('div', { className: 'role-role' }, t('role.switch'))),
-      React.createElement(Icon, { name: 'chevD', size: 14, style: { color: 'var(--text-faint)' } }),
-      open && React.createElement('div', { style: { position: 'absolute', top: '120%', right: 0, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 9, boxShadow: 'var(--shadow-lg)', width: 220, zIndex: 50, padding: 6 } },
-        React.createElement('div', { style: { fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text-faint)', fontWeight: 700, padding: '6px 10px' } }, t('role.switch')),
-        ROLES.map(r => React.createElement('button', { key: r, onClick: (e) => { e.stopPropagation(); setRole(r); setOpen(false); },
-          style: { display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', border: 'none', background: r === role ? 'var(--primary-tint)' : 'transparent', borderRadius: 6, padding: '8px 10px', cursor: 'pointer' } },
-          React.createElement('span', { className: 'role-avatar', style: { width: 26, height: 26, fontSize: 10 } }, initials[r]),
-          React.createElement('span', { style: { fontSize: 12, fontWeight: 600 } }, t('role.' + r)),
-          r === role && React.createElement(Icon, { name: 'check', size: 14, style: { marginLeft: 'auto', color: 'var(--primary)' } })))));
+        React.createElement('div', { className: 'role-name' }, t('role.' + role).replace(/\s*\(.*\)/, ''))));
   }
 
   /* ---------------- Shell ---------------- */
