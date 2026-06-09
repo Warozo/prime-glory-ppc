@@ -14,7 +14,18 @@
       "Bash(git config *)",
       "Bash(git add *)",
       "Bash(git commit -m 'Initial commit: Prime Glory PPC System with Supabase integration *)",
-      "Bash(git commit -m 'Add documentation: README, DEPLOYMENT guide *)"
+      "Bash(git commit -m 'Add documentation: README, DEPLOYMENT guide *)",
+      "mcp__0c1828a1-14cb-48e9-b4ce-20ea18fb5055__list_teams",
+      "mcp__0c1828a1-14cb-48e9-b4ce-20ea18fb5055__list_projects",
+      "mcp__0c1828a1-14cb-48e9-b4ce-20ea18fb5055__deploy_to_vercel",
+      "Bash(git commit -m 'Add Vercel config for static HTML SPA routing *)",
+      "Bash(git push *)",
+      "Bash(git commit -m 'Fix auth to use mock users directly \\(avoid async issue\\) *)",
+      "Bash(git commit -m 'Use default mock state for instant dashboard loading *)",
+      "Bash(git commit -m 'Expand DEFAULT_STATE with complete mock data *)",
+      "Bash(git commit -m 'Add home dashboard with module navigation *)",
+      "Bash(gh pr create --title 'Deploy Prime Glory PPC System to Vercel' --body ' *)",
+      "Bash(git commit -m 'Restore original working prototype \\(revert broken Supabase rewrite\\) *)"
     ]
   }
 }

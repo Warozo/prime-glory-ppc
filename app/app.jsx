@@ -43,15 +43,6 @@
     users: (p) => React.createElement(window.PG_Users, p),
   };
 
-  /* Mock users for auth (fallback when Supabase unavailable) */
-  const MOCK_USERS = [
-    { username: 'admin', password: 'prime888', role: 'admin', status: 'A', fullName: 'Administrator' },
-    { username: 'ppc001', password: 'ppc123', role: 'ppc', status: 'A', fullName: 'PPC Planner' },
-    { username: 'warehouse', password: 'wh123', role: 'warehouse', status: 'A', fullName: 'Warehouse Manager' },
-    { username: 'production', password: 'prod123', role: 'production', status: 'A', fullName: 'Production Manager' },
-    { username: 'management', password: 'mgmt123', role: 'management', status: 'A', fullName: 'Management' },
-  ];
-
   /* ---------------- Login ---------------- */
   function Login({ lang, setLang, onLogin }) {
     const t = (k) => tr(lang, k);
@@ -59,7 +50,8 @@
     const [p, setP] = React.useState('');
     const [err, setErr] = React.useState('');
     const submit = () => {
-      const found = MOCK_USERS.find(x => x.username === u.trim() && x.password === p);
+      const users = window.PG_DATA.buildState().users;
+      const found = users.find(x => x.username === u.trim() && x.password === p);
       if (!found) { setErr(lang === 'th' ? 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' : 'Invalid username or password'); return; }
       if (found.status !== 'A') { setErr(lang === 'th' ? 'บัญชีถูกปิดใช้งาน' : 'Account is inactive'); return; }
       onLogin(found.role);
@@ -121,52 +113,10 @@
           r === role && React.createElement(Icon, { name: 'check', size: 14, style: { marginLeft: 'auto', color: 'var(--primary)' } })))));
   }
 
-  /* Default mock state for dashboard - complete with all properties */
-  const DEFAULT_STATE = {
-    steps: [
-      { key: 'issue', name: 'Material Issue', nameTh: 'เบิกวัตถุดิบ', dur: 1, ic: 'box' },
-      { key: 'weigh', name: 'Weighing', nameTh: 'ชั่งวัตถุดิบ', dur: 1, ic: 'scale' },
-      { key: 'mix', name: 'Mixing', nameTh: 'ผสม', dur: 3, ic: 'blend' },
-      { key: 'fill', name: 'Filling', nameTh: 'บรรจุ', dur: 2, ic: 'fill' },
-      { key: 'seal', name: 'Sealing', nameTh: 'ซีล', dur: 1, ic: 'seal' },
-      { key: 'qc', name: 'QC', nameTh: 'ตรวจสอบ', dur: 1, ic: 'qc' },
-      { key: 'label', name: 'Labeling', nameTh: 'ติดฉลาก', dur: 1, ic: 'label' },
-      { key: 'box', name: 'Boxing', nameTh: 'ใส่กล่อง', dur: 1, ic: 'box2' }
-    ],
-    materials: [
-      { code: 'RM001', name: 'Rose Base', nameTh: 'เบสน้ำกุหลาบ', unit: 'kg', cat: 'Base', status: 'A' },
-      { code: 'RM002', name: 'Hyaluronic Acid', nameTh: 'ไฮยาลูรอนิค', unit: 'kg', cat: 'Active', status: 'A' }
-    ],
-    finished_goods: [
-      { code: 'FG001', name: 'Rose Serum 5g', nameTh: 'โรสเซรั่ม 5g', unit: 'pcs', cat: 'Serum', status: 'A' },
-      { code: 'FG002', name: 'Vitamin C Serum', nameTh: 'เซรั่มวิตามินซี', unit: 'pcs', cat: 'Serum', status: 'A' }
-    ],
-    lines: [
-      { id: 'L01', name: 'Line 1 - Serum', manpower: 5, dailyCap: 500 },
-      { id: 'L02', name: 'Line 2 - Foundation', manpower: 6, dailyCap: 400 }
-    ],
-    workflows: [],
-    users: MOCK_USERS,
-    orders: [],
-    schedules: [],
-    customers: [
-      { id: '1', code: 'C001', name: 'Cosmetics Express', phone: '02-123-4567' },
-      { id: '2', code: 'C002', name: 'Beauty Plus', phone: '02-234-5678' }
-    ],
-    stock: [],
-    chartData: {
-      production: { labels: ['Mon','Tue','Wed','Thu','Fri'], data: [450, 520, 480, 610, 550] },
-      efficiency: { labels: ['L01','L02'], data: [92, 88] },
-      materials: { labels: ['Active', 'Base', 'Packaging'], data: [35, 40, 25] }
-    },
-    kpis: { ordersTotal: 0, ordersScheduled: 0, completionRate: 78, avgLeadTime: 4.2 },
-    gantt: { start: '2026-06-01', end: '2026-06-30', lines: [], orders: [] }
-  };
-
   /* ---------------- Shell ---------------- */
   function Shell({ tweaks, setTweak, lang, setLang, onLogout }) {
     const [route, setRoute] = React.useState('dashboard');
-    const [state, setState] = React.useState(() => DEFAULT_STATE);
+    const [state, setState] = React.useState(() => D.buildState());
     const t = (k, v) => tr(lang, k, v);
     const role = tweaks.role;
 
@@ -175,7 +125,7 @@
     const go = (r) => { if (allowed(role, r)) setRoute(r); };
     React.useEffect(() => { window.__pgGo = go; });
     const props = { state, setState, go };
-    const waitingCount = (state.orders || []).filter(o => o.status === 'waiting').length;
+    const waitingCount = state.orders.filter(o => o.status === 'waiting').length;
 
     const curLabel = t(NAV_LABEL[route] || 'nav.dashboard');
     const curSec = (NAV.find(s => s.items.some(i => i.k === route)) || {}).sec;
@@ -215,23 +165,7 @@
           React.createElement('button', { className: 'tb-icon-btn', title: t('btn.login'), onClick: onLogout }, React.createElement(Icon, { name: 'logout', size: 16 })),
           React.createElement(RoleSwitch, { role, setRole: (r) => setTweak('role', r), lang })),
         React.createElement('main', { className: 'content' },
-          React.createElement('div', { style: { padding: '40px', textAlign: 'center' } },
-            React.createElement('h1', { style: { fontSize: '28px', marginBottom: '20px' } }, 'Prime Glory PPC System'),
-            React.createElement('p', { style: { fontSize: '16px', color: 'var(--text-muted)', marginBottom: '40px' } }, 'Manufacturing Operations Platform'),
-            React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', maxWidth: '1000px', margin: '0 auto' } },
-              React.createElement('div', { style: { padding: '20px', background: 'var(--surface-2)', borderRadius: '8px' } },
-                React.createElement('h3', null, '📊 Dashboard'),
-                React.createElement('p', { style: { color: 'var(--text-faint)', marginTop: '10px' } }, 'View KPIs and production metrics'),
-                React.createElement('button', { onClick: () => go('dashboard'), style: { marginTop: '10px', padding: '8px 16px', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' } }, 'Open')),
-              React.createElement('div', { style: { padding: '20px', background: 'var(--surface-2)', borderRadius: '8px' } },
-                React.createElement('h3', null, '📝 Orders'),
-                React.createElement('p', { style: { color: 'var(--text-faint)', marginTop: '10px' } }, 'Manage customer orders'),
-                React.createElement('button', { onClick: () => go('orders'), style: { marginTop: '10px', padding: '8px 16px', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' } }, 'Open')),
-              React.createElement('div', { style: { padding: '20px', background: 'var(--surface-2)', borderRadius: '8px' } },
-                React.createElement('h3', null, '⏱️ Scheduling'),
-                React.createElement('p', { style: { color: 'var(--text-faint)', marginTop: '10px' } }, 'Production schedule (Gantt)'),
-                React.createElement('button', { onClick: () => go('schedule'), style: { marginTop: '10px', padding: '8px 16px', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' } }, 'Open'))
-            )))));
+          (ROUTES[route] || ROUTES.dashboard)(props))));
   }
 
   /* ---------------- Root ---------------- */
