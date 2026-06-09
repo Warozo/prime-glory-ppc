@@ -75,8 +75,9 @@
     { id: 'WF-C', name: 'Lip & Color (Line C)', line: 'C', steps: wf(['issue','weigh','mix','fill','seal','label','carton']) },
   ];
 
-  const today = new Date(2026, 5, 6); // Jun 6 2026
-  function d(offset) { const x = new Date(today); x.setDate(x.getDate() + offset); return x.toISOString().slice(0, 10); }
+  const _now = new Date();
+  const today = new Date(_now.getFullYear(), _now.getMonth(), _now.getDate()); // real local "today" at load
+  function d(offset) { const x = new Date(today); x.setDate(x.getDate() + offset); const y = x.getFullYear(), m = String(x.getMonth() + 1).padStart(2, '0'), dd = String(x.getDate()).padStart(2, '0'); return y + '-' + m + '-' + dd; }
 
   // Customer orders, mapped across the 5-status flow
   // Customer orders — empty so the user keys their own and walks the flow
