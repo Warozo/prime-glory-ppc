@@ -36,6 +36,10 @@
     const poolReady = state.prodOrders.filter(p => (p.status === 'issued' || p.status === 'scheduled' || p.status === 'inprogress') && remainingOf(p) > 0);
     const poolWaiting = state.prodOrders.filter(p => p.status === 'reserved');
 
+    // Single sorted line order used for BOTH rendering and drag row-index math,
+    // so a dragged bar lands on the line actually under the cursor (A, B, C ...).
+    const sortedLines = state.lines.slice().sort((a, b) => a.id.localeCompare(b.id));
+
     function persist() {
       setState(prev => ({ ...prev, scheduleBars: barsRef.current,
         // keep each started lot's line in sync with its allocation bar (line is locked post-start, so usually a no-op)
@@ -47,7 +51,14 @@
     function onBarPointerDown(e, bar, mode) {
       e.stopPropagation();
       e.preventDefault();
-      drag.current = { id: bar.id, mode, startX: e.clientX, startY: e.clientY, oStart: bar.startDay, oDays: bar.days, oLine: bar.line };
+      // measure the ACTUAL rendered day-cell width and row height so the drag
+      // tracks the cursor even if CSS/zoom makes them differ from the constants
+      const cellsDiv = e.currentTarget.parentElement;            // bars live inside the day-cells container
+      const rowEl = cellsDiv ? cellsDiv.parentElement : null;
+      const dayCell = cellsDiv ? cellsDiv.querySelector('div') : null; // first child = first day cell
+      const dayW = dayCell ? dayCell.getBoundingClientRect().width : DAY_W;
+      const rowH = rowEl ? rowEl.getBoundingClientRect().height : ROW_H;
+      drag.current = { id: bar.id, mode, startX: e.clientX, startY: e.clientY, oStart: bar.startDay, oDays: bar.days, oLine: bar.line, dayW, rowH };
       setActiveBar(bar.id);
       window.addEventListener('pointermove', onMove);
       window.addEventListener('pointerup', onUp);
@@ -60,7 +71,7 @@
 
     function onMove(e) {
       const d = drag.current; if (!d) return;
-      const dDays = Math.round((e.clientX - d.startX) / DAY_W);
+      const dDays = Math.round((e.clientX - d.startX) / (d.dayW || DAY_W));
       setBars(prev => prev.map(b => {
         if (b.id !== d.id) return b;
         if (d.mode === 'resize') {
@@ -70,9 +81,10 @@
           const startDay = Math.max(0, Math.min(DAYS - b.days, d.oStart + dDays));
           // once production has started on this allocation, keep it on its line (no cross-line move)
           if (barStarted(b)) return { ...b, startDay };
-          const dRow = Math.round((e.clientY - d.startY) / ROW_H);
-          const idx = Math.max(0, Math.min(state.lines.length - 1, state.lines.findIndex(l => l.id === d.oLine) + dRow));
-          return { ...b, startDay, line: state.lines[idx].id };
+          const dRow = Math.round((e.clientY - d.startY) / (d.rowH || ROW_H));
+          // use the SAME sorted order as the rendered rows so it lands on the right line
+          const idx = Math.max(0, Math.min(sortedLines.length - 1, sortedLines.findIndex(l => l.id === d.oLine) + dRow));
+          return { ...b, startDay, line: sortedLines[idx].id };
         }
       }));
     }
@@ -92,7 +104,8 @@
       if (!(po.status === 'issued' || po.status === 'scheduled' || po.status === 'inprogress')) return;
       const rem = remainingOf(po); if (rem <= 0) return;
       const rect = gridRef.current.getBoundingClientRect();
-      const x = e.clientX - rect.left - LABEL_W;
+      // account for horizontal scroll of the gantt grid so the day lands under the cursor
+      const x = e.clientX - rect.left - LABEL_W + (gridRef.current.scrollLeft || 0);
       const startDay = Math.max(0, Math.min(DAYS - 2, Math.floor(x / DAY_W)));
       // ask how much of the (remaining) qty goes on this line — the rest can be dropped elsewhere
       setAllocReq({ po, lineId, startDay, max: rem });
@@ -203,8 +216,8 @@
                     React.createElement('div', { style: { fontSize: 9, color: 'var(--text-faint)' } }, dt.toLocaleDateString(lang === 'th' ? 'th-TH' : 'en-US', { weekday: 'short' })),
                     React.createElement('div', { style: { fontSize: 12, fontWeight: 700, color: i === todayIdx ? 'var(--primary)' : 'var(--text)' } }, dt.getDate()));
                 })),
-              // rows (sorted by line id so A, B, C stay in order even after delete/re-add)
-              state.lines.slice().sort((a, b) => a.id.localeCompare(b.id)).map(ln => {
+              // rows (same sorted order as the drag math so A, B, C stay in order)
+              sortedLines.map(ln => {
                 const lineBars = bars.filter(b => b.line === ln.id);
                 const planned = lineBars.reduce((a, b) => a + b.qty, 0);
                 const util = Math.min(100, Math.round(planned / (ln.dailyCap * 3) * 100));
