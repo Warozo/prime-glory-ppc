@@ -85,6 +85,17 @@
       setState(prev => ({ ...prev, stepLib: [...prev.stepLib, { key: k, name: form.name || form.nameTh, nameTh: form.nameTh || form.name, dur: +form.dur || 1, ic: form.ic, type: form.type === 'qa' ? 'qa' : undefined }] }));
       toast(t('toast.saved')); setStepModal(false);
     }
+    function editStep(form) {
+      const k = form.key;
+      const patch = (s) => ({ ...s, name: form.name || form.nameTh, nameTh: form.nameTh || form.name, ic: form.ic, type: form.type === 'qa' ? 'qa' : undefined });
+      setState(prev => ({ ...prev,
+        stepLib: prev.stepLib.map(s => s.key === k ? patch(s) : s),
+        // keep templates in sync with the renamed/retyped library step
+        workflows: prev.workflows.map(w => ({ ...w, steps: w.steps.map(st => st.key === k ? patch(st) : st) })) }));
+      // reflect the change on the canvas too if the step is placed there
+      setSteps(prev => prev.map(st => st.key === k ? patch(st) : st));
+      toast(t('toast.saved')); setStepModal(false);
+    }
 
     // Template list card
     const tplCard = e('div', { className: 'card' },
@@ -104,7 +115,7 @@
     const paletteCard = e('div', { className: 'card' },
       e('div', { className: 'card-h' }, e(Icon, { name: 'designer', size: 15, style: { color: 'var(--primary)' } }), e('h3', null, t('dsg.palette')),
         e('div', { className: 'card-h-actions' },
-          e('button', { className: 'btn btn-sm btn-pri', title: (lang === 'th' ? 'เพิ่มขั้นตอน' : 'Add step'), onClick: () => setStepModal(true) }, e(Icon, { name: 'plus', size: 12 })))),
+          e('button', { className: 'btn btn-sm btn-pri', title: (lang === 'th' ? 'เพิ่มขั้นตอน' : 'Add step'), onClick: () => setStepModal({ mode: 'add' }) }, e(Icon, { name: 'plus', size: 12 })))),
       e('div', { style: { padding: 8, display: 'flex', flexDirection: 'column', gap: 6 } },
         state.stepLib.length === 0
           ? e('div', { className: 'empty', style: { fontSize: 11 } }, lang === 'th' ? 'ยังไม่มีขั้นตอนในคลัง' : 'No steps in library')
@@ -115,10 +126,13 @@
             e('div', { style: { minWidth: 0, flex: 1 } },
               e('div', { style: { fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, lang === 'th' ? s.nameTh : s.name),
               e('div', { className: 'mono', style: { fontSize: 9, color: s.type === 'qa' ? 'var(--danger)' : 'var(--text-faint)' } }, s.type === 'qa' ? 'QA · ' + s.key : s.key)),
-            canDelete && e('button', { className: 'btn btn-sm btn-ghost btn-icon', draggable: false, title: t('btn.delete'),
-              onMouseDown: (ev) => ev.stopPropagation(),
-              onClick: (ev) => { ev.stopPropagation(); delStep(s.key); },
-              style: { marginLeft: 'auto', flexShrink: 0 } }, e(Icon, { name: 'trash', size: 12, style: { color: 'var(--danger)' } }))))));
+            canDelete && e('div', { className: 'row', style: { marginLeft: 'auto', gap: 2, flexShrink: 0 } },
+              e('button', { className: 'btn btn-sm btn-ghost btn-icon', draggable: false, title: t('btn.edit'),
+                onMouseDown: (ev) => ev.stopPropagation(),
+                onClick: (ev) => { ev.stopPropagation(); setStepModal({ mode: 'edit', step: s }); } }, e(Icon, { name: 'edit', size: 12 })),
+              e('button', { className: 'btn btn-sm btn-ghost btn-icon', draggable: false, title: t('btn.delete'),
+                onMouseDown: (ev) => ev.stopPropagation(),
+                onClick: (ev) => { ev.stopPropagation(); delStep(s.key); } }, e(Icon, { name: 'trash', size: 12, style: { color: 'var(--danger)' } })))))));
 
     // Canvas children
     const canvasInner = [];
@@ -150,19 +164,21 @@
       e(PageHead, { title: t('dsg.title'), sub: t('dsg.sub') }),
       e('div', { style: { display: 'grid', gridTemplateColumns: '210px 200px 1fr', gap: 14, alignItems: 'start' } },
         tplCard, paletteCard, canvasCard),
-      stepModal && e(StepLibModal, { t, lang, onClose: () => setStepModal(false), onSubmit: addStep }));
+      stepModal && e(StepLibModal, { t, lang, editing: stepModal.mode === 'edit' ? stepModal.step : null, onClose: () => setStepModal(false), onSubmit: stepModal.mode === 'edit' ? editStep : addStep }));
   }
 
-  function StepLibModal({ t, lang, onClose, onSubmit }) {
+  function StepLibModal({ t, lang, editing, onClose, onSubmit }) {
     const Field = window.PG_UI.Field, Modal = window.PG_UI.Modal;
-    const IC_OPTIONS = ['box', 'blend', 'fill', 'seal', 'box2', 'wrap', 'carton', 'qc', 'label'];
-    const [f, setF] = React.useState({ key: '', nameTh: '', name: '', dur: 1, ic: 'box', type: 'normal' });
+    const IC_OPTIONS = ['box', 'scale', 'blend', 'fill', 'seal', 'box2', 'wrap', 'carton', 'qc', 'label'];
+    const [f, setF] = React.useState(editing
+      ? { key: editing.key, nameTh: editing.nameTh || '', name: editing.name || '', dur: editing.dur || 1, ic: editing.ic || 'box', type: editing.type === 'qa' ? 'qa' : 'normal' }
+      : { key: '', nameTh: '', name: '', dur: 1, ic: 'box', type: 'normal' });
     const set = (k, v) => setF(p => ({ ...p, [k]: v }));
-    return e(Modal, { title: (lang === 'th' ? 'เพิ่มขั้นตอนใหม่' : 'Add New Step'), onClose, width: 460,
+    return e(Modal, { title: editing ? (lang === 'th' ? 'แก้ไขขั้นตอน' : 'Edit Step') : (lang === 'th' ? 'เพิ่มขั้นตอนใหม่' : 'Add New Step'), onClose, width: 460,
       footer: e(React.Fragment, null, e('button', { className: 'btn', onClick: onClose }, t('btn.cancel')),
         e('button', { className: 'btn btn-pri', disabled: !f.key.trim() || (!f.nameTh && !f.name), onClick: () => onSubmit(f) }, t('btn.save'))) },
       e('div', { className: 'grid g-2', style: { gap: 12 } },
-        e('div', { style: { gridColumn: 'span 2' } }, e(Field, { label: (lang === 'th' ? 'รหัสขั้นตอน (key)' : 'Step key'), required: true }, e('input', { className: 'input mono', value: f.key, onChange: ev => set('key', ev.target.value.replace(/\s+/g, '')), placeholder: 'mystep' }))),
+        e('div', { style: { gridColumn: 'span 2' } }, e(Field, { label: (lang === 'th' ? 'รหัสขั้นตอน (key)' : 'Step key'), required: true }, e('input', { className: 'input mono', value: f.key, disabled: !!editing, onChange: ev => set('key', ev.target.value.replace(/\s+/g, '')), placeholder: 'mystep' }))),
         e('div', { style: { gridColumn: 'span 2' } }, e(Field, { label: (lang === 'th' ? 'ประเภทขั้นตอน' : 'Step type') },
           e('div', { className: 'row', style: { gap: 8 } },
             [['normal', lang === 'th' ? 'ปกติ' : 'Normal'], ['qa', lang === 'th' ? 'ตรวจคุณภาพ (QA)' : 'Quality check (QA)']].map(opt => e('button', { key: opt[0], type: 'button', onClick: () => set('type', opt[0]),
