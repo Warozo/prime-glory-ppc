@@ -112,19 +112,32 @@
         actions: React.createElement('button', { className: 'btn btn-pri', onClick: () => go('orders') },
           React.createElement(Icon, { name: 'plus', size: 15 }), t('btn.new')) }),
 
-      // Pipeline board
-      React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 12, alignItems: 'start' } },
-        FLOW.map(st => {
-          const items = state.orders.filter(o => o.status === st);
-          return React.createElement('div', { key: st, style: { background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 9, minHeight: 200 } },
+      // Pipeline board — 6 columns: 3 plan stages + 3 production stages (derived from live progress)
+      (function () {
+        const SC = window.PG_UI.STATUS_COLOR;
+        const COLS = [
+          { key: 'request',  label: t('status.request'),   color: SC.request,   items: state.orders.filter(o => o.status === 'request') },
+          { key: 'waiting',  label: t('status.waiting'),   color: SC.waiting,   items: state.orders.filter(o => o.status === 'waiting') },
+          { key: 'reserved', label: t('status.reserved'),  color: SC.reserved,  items: state.orders.filter(o => o.status === 'reserved') },
+          { key: 'scheduled', label: t('status.scheduled'), color: SC.scheduled, variant: 'scheduled',
+            items: state.orders.filter(o => o.status === 'scheduled') },
+          { key: 'produced', label: t('status.completed'), color: 'var(--st-completed)', variant: 'produced',
+            items: state.orders.filter(o => o.status === 'completed' && D.orderProgress(state, o).received < o.qty) },
+          { key: 'fgdone',   label: lang === 'th' ? 'รับเข้าคลังสำเร็จรูปเสร็จ' : 'FG fully received', color: 'var(--primary)', variant: 'fgdone',
+            items: state.orders.filter(o => o.status === 'completed' && D.orderProgress(state, o).received >= o.qty) },
+        ];
+        return React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 10, alignItems: 'start' } },
+          COLS.map(col => React.createElement('div', { key: col.key, style: { background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 9, minHeight: 200 } },
             React.createElement('div', { style: { padding: '10px 12px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 7 } },
-              React.createElement('span', { style: { width: 9, height: 9, borderRadius: 3, background: window.PG_UI.STATUS_COLOR[st] } }),
-              React.createElement('span', { style: { fontSize: 11.5, fontWeight: 700, lineHeight: 1.2 } }, t('status.' + st)),
-              React.createElement('span', { style: { marginLeft: 'auto', fontSize: 11, fontWeight: 700, color: 'var(--text-faint)' } }, items.length)),
+              React.createElement('span', { style: { width: 9, height: 9, borderRadius: 3, background: col.color, flexShrink: 0 } }),
+              React.createElement('span', { style: { fontSize: 11, fontWeight: 700, lineHeight: 1.2 } }, col.label),
+              React.createElement('span', { style: { marginLeft: 'auto', fontSize: 11, fontWeight: 700, color: 'var(--text-faint)' } }, col.items.length)),
             React.createElement('div', { style: { padding: 8, display: 'flex', flexDirection: 'column', gap: 8 } },
-              items.length === 0 && React.createElement('div', { className: 'faint', style: { fontSize: 10.5, textAlign: 'center', padding: '14px 0' } }, '—'),
-              items.map(o => React.createElement(OrderCard, { key: o.id, o, state, lang, onClick: () => setSel(o.id), onDelete: (canDelete && (o.status === 'request' || o.status === 'waiting')) ? () => del(o) : null }))));
-        })),
+              col.items.length === 0 && React.createElement('div', { className: 'faint', style: { fontSize: 10.5, textAlign: 'center', padding: '14px 0' } }, '—'),
+              col.items.map(o => React.createElement(OrderCard, { key: o.id, o, state, lang, onClick: () => setSel(o.id),
+                onDelete: (canDelete && (o.status === 'request' || o.status === 'waiting')) ? () => del(o) : null,
+                prog: col.variant ? Object.assign({ variant: col.variant, qty: o.qty }, D.orderProgress(state, o)) : null }))))));
+      })(),
 
       order && React.createElement(OrderDetail, { order, state, setState, t, lang, onClose: () => setSel(null), onAdvance: requestAdvance, onBack: back, onCancelReserve: cancelReservation, go }),
       poNaming && React.createElement(PoNameModal, { order: poNaming, state, t, lang,
@@ -148,7 +161,14 @@
       dup && React.createElement('div', { style: { fontSize: 11, color: 'var(--danger)', marginTop: 6 } }, lang === 'th' ? 'เลขใบสั่งผลิตนี้ถูกใช้แล้ว' : 'This PO number is already used'));
   }
 
-  function OrderCard({ o, state, lang, onClick, onDelete }) {
+  // small inline stat row for a card: label + value with a colour
+  function cardStat(label, value, color) {
+    return React.createElement('div', { className: 'row', style: { justifyContent: 'space-between', fontSize: 10 } },
+      React.createElement('span', { className: 'faint' }, label),
+      React.createElement('span', { className: 'mono', style: { fontWeight: 700, color: color } }, value));
+  }
+
+  function OrderCard({ o, state, lang, onClick, onDelete, prog }) {
     const { t } = useI18n();
     const req = D.bomRequirement(state, o.fg, o.qty);
     const shortCount = req.filter(r => r.short > 0).length;
@@ -168,7 +188,19 @@
         React.createElement('span', { className: 'mono', style: { fontWeight: 600 } }, fmt(o.qty) + ' ' + t('u.pcs')),
         React.createElement('span', { className: 'faint row', style: { gap: 3 } }, React.createElement(Icon, { name: 'clock', size: 11 }), fmtDate(o.due))),
       o.status === 'waiting' && shortCount > 0 && React.createElement('div', { style: { marginTop: 7, fontSize: 10, color: 'var(--danger)', fontWeight: 600, display: 'flex', gap: 4, alignItems: 'center' } },
-        React.createElement(Icon, { name: 'alert', size: 11 }), shortCount + ' ' + t('f.shortage'))));
+        React.createElement(Icon, { name: 'alert', size: 11 }), shortCount + ' ' + t('f.shortage')),
+      // production progress (scheduled / produced / fg-received cards)
+      prog && React.createElement('div', { style: { marginTop: 7, paddingTop: 7, borderTop: '1px dashed var(--border)', display: 'flex', flexDirection: 'column', gap: 4 } },
+        prog.variant === 'scheduled' && React.createElement('span', { className: 'badge', style: { alignSelf: 'flex-start', fontSize: 9, color: prog.started ? 'var(--primary)' : 'var(--text-muted)', background: prog.started ? 'var(--primary-tint)' : 'var(--surface-3)' } },
+          prog.started ? (lang === 'th' ? '● กำลังผลิต' : '● In production') : (lang === 'th' ? 'รอผลิต' : 'Waiting to start')),
+        // scheduled: show produced & received only if there is an amount
+        prog.variant === 'scheduled' && prog.produced > 0 && cardStat(lang === 'th' ? 'ผลิตเสร็จ' : 'Produced', fmt(prog.produced) + '/' + fmt(prog.qty), 'var(--st-completed)'),
+        prog.variant === 'scheduled' && prog.received > 0 && cardStat(lang === 'th' ? 'รับเข้าแล้ว' : 'Received', fmt(prog.received) + '/' + fmt(prog.qty), 'var(--ok)'),
+        // produced card: production done, show FG received progress
+        prog.variant === 'produced' && cardStat(lang === 'th' ? 'ผลิตเสร็จ' : 'Produced', fmt(prog.qty) + '/' + fmt(prog.qty), 'var(--st-completed)'),
+        prog.variant === 'produced' && cardStat(lang === 'th' ? 'รับเข้าแล้ว' : 'Received', fmt(prog.received) + '/' + fmt(prog.qty), prog.received > 0 ? 'var(--ok)' : 'var(--text-faint)'),
+        // fg-done card: fully received
+        prog.variant === 'fgdone' && cardStat(lang === 'th' ? 'รับเข้าครบ' : 'Received', fmt(prog.received) + '/' + fmt(prog.qty), 'var(--ok)'))));
   }
 
   function OrderDetail({ order, state, setState, t, lang, onClose, onAdvance, onBack, onCancelReserve, go }) {

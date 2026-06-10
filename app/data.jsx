@@ -237,6 +237,20 @@
     return { id: 'LOT-' + po.id.replace('PO-', ''), po: po.id, order: po.order, fg: po.fg, qty: po.qty, line: po.line, wf: flow.id, stations, outputLog: [] };
   }
 
+  // Read-only progress derivation for a customer order (does NOT mutate status):
+  //   produced  = output at the last station of its WIP lot
+  //   received  = total FG quantity received into the warehouse for its PO
+  //   started   = production has actually begun (prod order is in progress)
+  function orderProgress(s, o) {
+    const po = s.prodOrders.find(p => p.order === o.id);
+    const lot = s.lotsWip.find(l => l.order === o.id);
+    const produced = lot ? (lot.stations[lot.stations.length - 1].cumOut || 0) : 0;
+    const fgp = po ? s.fgPending.find(f => f.po === po.id) : null;
+    const received = fgp ? (fgp.receipts || []).reduce((a, r) => a + r.qty, 0) : 0;
+    const started = !!po && po.status === 'inprogress';
+    return { produced, received, started };
+  }
+
   function fgOnHand(s, code) { return s.fgStock.filter(x => x.fg === code).reduce((a, x) => a + x.qty, 0); }
 
   /* ---- Persistence: whole-state snapshot in Supabase (id='main') ---- */
@@ -283,5 +297,5 @@
     return function () { try { _supa.removeChannel(ch); } catch (e) {} };
   }
 
-  window.PG_DATA = { buildState, loadState, saveState, subscribe, genId, fgName, rmName, rmOnHand, rmLotsFEFO, rmReserved, rmAvailable, rmUnit, fgOnHand, bomRequirement, workflowForLine, buildWipLot, STEP_LIB, PROC_STATUS };
+  window.PG_DATA = { buildState, loadState, saveState, subscribe, genId, fgName, rmName, rmOnHand, rmLotsFEFO, rmReserved, rmAvailable, rmUnit, fgOnHand, bomRequirement, workflowForLine, buildWipLot, orderProgress, STEP_LIB, PROC_STATUS };
 })();

@@ -210,6 +210,19 @@
   }
 
   /* ---------------- Customer Orders ---------------- */
+  // Derived status badge: mirrors the order-flow cards (scheduled→กำลังผลิต,
+  // completed→ผลิตเสร็จ or รับเข้าคลังเสร็จ) without changing order.status itself.
+  function orderStatusBadge(o, pr, lang) {
+    if (o.status === 'scheduled' && pr.started) {
+      return React.createElement('span', { className: 'badge', style: { color: 'var(--primary)', background: 'var(--primary-tint)' } }, lang === 'th' ? '● กำลังผลิต' : '● In production');
+    }
+    if (o.status === 'completed') {
+      if (pr.received >= o.qty) return React.createElement('span', { className: 'badge', style: { color: '#fff', background: 'var(--primary)' } }, lang === 'th' ? 'รับเข้าคลังเสร็จ' : 'FG received');
+      return React.createElement('span', { className: 'badge', style: { color: 'var(--st-completed)', background: 'var(--ok-tint)' } }, lang === 'th' ? 'ผลิตเสร็จ' : 'Produced');
+    }
+    return React.createElement(StatusBadge, { status: o.status });
+  }
+
   function CustomerOrders({ state, setState, go, canDelete }) {
     const { t, lang } = useI18n();
     const toast = useToast();
@@ -231,20 +244,28 @@
         React.createElement('table', { className: 'tbl' },
           React.createElement('thead', null, React.createElement('tr', null,
             React.createElement('th', null, t('f.order')), React.createElement('th', null, t('f.customer')), React.createElement('th', null, t('f.product')),
-            React.createElement('th', { className: 'num' }, t('f.qty')), React.createElement('th', null, t('f.duedate')), React.createElement('th', null, t('f.priority')), React.createElement('th', null, t('f.status')), React.createElement('th', { style: { width: 60 } }, ''))),
+            React.createElement('th', { className: 'num' }, t('f.qty')),
+            React.createElement('th', { className: 'num' }, lang === 'th' ? 'ผลิตเสร็จ' : 'Produced'),
+            React.createElement('th', { className: 'num' }, lang === 'th' ? 'รับเข้า FG' : 'FG received'),
+            React.createElement('th', null, t('f.duedate')), React.createElement('th', null, t('f.priority')), React.createElement('th', null, t('f.status')), React.createElement('th', { style: { width: 60 } }, ''))),
           React.createElement('tbody', null, state.orders.length === 0
-            ? React.createElement('tr', null, React.createElement('td', { colSpan: 8, className: 'empty' }, t('tbl.noresults')))
-            : state.orders.map(o => React.createElement('tr', { key: o.id, className: 'clickrow' },
+            ? React.createElement('tr', null, React.createElement('td', { colSpan: 10, className: 'empty' }, t('tbl.noresults')))
+            : state.orders.map(o => {
+            const pr = D.orderProgress(state, o);
+            return React.createElement('tr', { key: o.id, className: 'clickrow' },
             React.createElement('td', { className: 'mono', style: { fontWeight: 600, color: 'var(--primary)' }, onClick: () => go('flow') }, o.id),
             React.createElement('td', { onClick: () => go('flow') }, o.customer),
             React.createElement('td', { style: { fontWeight: 600 }, onClick: () => go('flow') }, D.fgName(state, o.fg, lang)),
             React.createElement('td', { className: 'num mono', style: { fontWeight: 600 }, onClick: () => go('flow') }, fmt(o.qty)),
+            React.createElement('td', { className: 'num mono', style: { fontWeight: 600, color: pr.produced > 0 ? 'var(--st-completed)' : 'var(--text-faint)' }, onClick: () => go('flow') }, pr.produced > 0 ? fmt(pr.produced) : '–'),
+            React.createElement('td', { className: 'num mono', style: { fontWeight: 600, color: pr.received > 0 ? 'var(--ok)' : 'var(--text-faint)' }, onClick: () => go('flow') }, pr.received > 0 ? fmt(pr.received) : '–'),
             React.createElement('td', { className: 'mono faint', onClick: () => go('flow') }, fmtDate(o.due)),
             React.createElement('td', { onClick: () => go('flow') }, React.createElement(PriorityBadge, { p: o.priority })),
-            React.createElement('td', { onClick: () => go('flow') }, React.createElement(StatusBadge, { status: o.status })),
+            React.createElement('td', { onClick: () => go('flow') }, orderStatusBadge(o, pr, lang, t)),
             React.createElement('td', null, (o.status === 'request' && canDelete)
               ? React.createElement('button', { className: 'btn btn-sm btn-ghost btn-icon', title: t('btn.delete'), onClick: (e) => { e.stopPropagation(); del(o.id); } }, React.createElement(Icon, { name: 'trash', size: 14, style: { color: 'var(--danger)' } }))
-              : React.createElement('span', { className: 'faint', style: { fontSize: 14 } }, '—')))))) ),
+              : React.createElement('span', { className: 'faint', style: { fontSize: 14 } }, '—')));
+            }))) ),
       show && React.createElement(OrderModal, { state, t, lang, onClose: () => setShow(false), onSubmit: add }));
   }
 
