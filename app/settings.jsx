@@ -77,7 +77,7 @@
             e('thead', null, e('tr', null,
               e('th', null, t('f.line')), e('th', { className: 'num' }, t('f.manpower')), e('th', { className: 'num' }, t('set.dailyplan')),
               e('th', null, t('dsg.templates')), e('th', { style: { width: 80 } }, ''))),
-            e('tbody', null, state.lines.map(l => {
+            e('tbody', null, state.lines.slice().sort((a, b) => a.id.localeCompare(b.id)).map(l => {
               const wf = state.workflows.find(w => w.id === l.wf) || state.workflows.find(w => w.line === l.id);
               return e('tr', { key: l.id },
                 e('td', null, e('div', { className: 'row', style: { gap: 8 } },

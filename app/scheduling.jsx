@@ -203,8 +203,8 @@
                     React.createElement('div', { style: { fontSize: 9, color: 'var(--text-faint)' } }, dt.toLocaleDateString(lang === 'th' ? 'th-TH' : 'en-US', { weekday: 'short' })),
                     React.createElement('div', { style: { fontSize: 12, fontWeight: 700, color: i === todayIdx ? 'var(--primary)' : 'var(--text)' } }, dt.getDate()));
                 })),
-              // rows
-              state.lines.map(ln => {
+              // rows (sorted by line id so A, B, C stay in order even after delete/re-add)
+              state.lines.slice().sort((a, b) => a.id.localeCompare(b.id)).map(ln => {
                 const lineBars = bars.filter(b => b.line === ln.id);
                 const planned = lineBars.reduce((a, b) => a + b.qty, 0);
                 const util = Math.min(100, Math.round(planned / (ln.dailyCap * 3) * 100));
