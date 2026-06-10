@@ -114,7 +114,7 @@
             e('span', { style: { width: 24, height: 24, borderRadius: 6, background: 'var(--primary-tint)', color: 'var(--primary)', display: 'grid', placeItems: 'center', flexShrink: 0 } }, e(Icon, { name: STEP_ICONS[s.ic] || 'box', size: 13 })),
             e('div', { style: { minWidth: 0, flex: 1 } },
               e('div', { style: { fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, lang === 'th' ? s.nameTh : s.name),
-              e('div', { className: 'faint', style: { fontSize: 9.5 } }, s.dur + (lang === 'th' ? ' ชม.' : 'h'))),
+              e('div', { className: 'faint mono', style: { fontSize: 9 } }, s.key)),
             canDelete && e('button', { className: 'btn btn-sm btn-ghost btn-icon', draggable: false, title: t('btn.delete'),
               onMouseDown: (ev) => ev.stopPropagation(),
               onClick: (ev) => { ev.stopPropagation(); delStep(s.key); },
@@ -139,7 +139,7 @@
           style: { border: '1px solid transparent', background: 'transparent', fontSize: 14, fontWeight: 600, borderRadius: 5, padding: '3px 6px', width: 240 },
           onFocus: (ev) => ev.target.style.background = 'var(--surface-2)', onBlur: (ev) => ev.target.style.background = 'transparent' }),
         e('div', { className: 'card-h-actions' },
-          e('span', { className: 'badge badge-soft' }, steps.length + ' ' + (lang === 'th' ? 'ขั้นตอน' : 'steps') + ' · ' + totalDur() + (lang === 'th' ? ' ชม.' : 'h')),
+          e('span', { className: 'badge badge-soft' }, steps.length + ' ' + (lang === 'th' ? 'ขั้นตอน' : 'steps')),
           e('button', { className: 'btn btn-sm btn-pri', onClick: saveTemplate }, e(Icon, { name: 'check', size: 13 }), t('btn.savetpl')))),
       e('div', { className: 'card-b' },
         e('div', { onDragOver: (ev) => { ev.preventDefault(); if (steps.length === 0) setOverIdx(0); }, onDrop: () => onDropAt(steps.length), style: { minHeight: 120 } }, canvasInner),
@@ -162,8 +162,7 @@
       footer: e(React.Fragment, null, e('button', { className: 'btn', onClick: onClose }, t('btn.cancel')),
         e('button', { className: 'btn btn-pri', disabled: !f.key.trim() || (!f.nameTh && !f.name), onClick: () => onSubmit(f) }, t('btn.save'))) },
       e('div', { className: 'grid g-2', style: { gap: 12 } },
-        e(Field, { label: (lang === 'th' ? 'รหัสขั้นตอน (key)' : 'Step key'), required: true }, e('input', { className: 'input mono', value: f.key, onChange: ev => set('key', ev.target.value.replace(/\s+/g, '')), placeholder: 'mystep' })),
-        e(Field, { label: (lang === 'th' ? 'เวลา (ชม.)' : 'Duration (h)'), required: true }, e('input', { className: 'input mono', type: 'number', min: 1, value: f.dur, onChange: ev => set('dur', ev.target.value) })),
+        e('div', { style: { gridColumn: 'span 2' } }, e(Field, { label: (lang === 'th' ? 'รหัสขั้นตอน (key)' : 'Step key'), required: true }, e('input', { className: 'input mono', value: f.key, onChange: ev => set('key', ev.target.value.replace(/\s+/g, '')), placeholder: 'mystep' }))),
         e('div', { style: { gridColumn: 'span 2' } }, e(Field, { label: (lang === 'th' ? 'ชื่อ (ไทย)' : 'Name (Thai)'), required: true }, e('input', { className: 'input', value: f.nameTh, onChange: ev => set('nameTh', ev.target.value) }))),
         e('div', { style: { gridColumn: 'span 2' } }, e(Field, { label: (lang === 'th' ? 'ชื่อ (อังกฤษ)' : 'Name (English)') }, e('input', { className: 'input', value: f.name, onChange: ev => set('name', ev.target.value) }))),
         e('div', { style: { gridColumn: 'span 2' } }, e(Field, { label: (lang === 'th' ? 'ไอคอน' : 'Icon') },
@@ -182,7 +181,6 @@
       e('div', { style: { flex: 1, minWidth: 0 } },
         e('div', { style: { fontSize: 12.5, fontWeight: 600 } }, lang === 'th' ? s.nameTh : s.name),
         e('div', { className: 'faint', style: { fontSize: 10.5 } }, lang === 'th' ? s.name : s.nameTh)),
-      e('span', { className: 'badge badge-soft mono' }, t('dsg.duration') + ' ' + (s.dur || 1) + (lang === 'th' ? ' ชม.' : 'h')),
       e('button', { className: 'btn btn-sm btn-ghost btn-icon', onClick: () => removeStep(s.uid), title: t('btn.delete') }, e(Icon, { name: 'trash', size: 14 })));
   }
 
