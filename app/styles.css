@@ -205,6 +205,19 @@ body[data-sidebar="collapsed"] .nav-badge,
 body[data-sidebar="collapsed"] .sb-brand-text { display: none; }
 body[data-sidebar="collapsed"] .nav-item { justify-content: center; padding: 9px; }
 
+/* sidebar collapse/expand toggle pinned at the bottom */
+.sb-collapse {
+  display: flex; align-items: center; gap: 11px; flex-shrink: 0;
+  margin: 4px 8px 10px; padding: 9px 16px;
+  border-radius: var(--r-md);
+  background: rgba(255,255,255,.05); color: var(--sidebar-text);
+  border: 1px solid rgba(255,255,255,.08); cursor: pointer;
+  font-size: 12px; white-space: nowrap;
+}
+.sb-collapse:hover { background: rgba(255,255,255,.13); color: #fff; }
+.sb-collapse .nav-ic { transition: transform .18s; }
+body[data-sidebar="collapsed"] .sb-collapse { justify-content: center; padding: 9px; }
+
 /* ---------- Topbar ---------- */
 .topbar {
   height: var(--topbar-h);

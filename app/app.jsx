@@ -166,11 +166,15 @@
             if (!items.length) return null;
             return React.createElement('div', { key: sec.sec },
               React.createElement('div', { className: 'sb-section-label' }, t(sec.sec)),
-              items.map(it => React.createElement('button', { key: it.k, className: 'nav-item' + (route === it.k ? ' active' : ''), onClick: () => go(it.k) },
+              items.map(it => React.createElement('button', { key: it.k, className: 'nav-item' + (route === it.k ? ' active' : ''), title: t(NAV_LABEL[it.k]), onClick: () => go(it.k) },
                 React.createElement(Icon, { name: it.ic, size: 17, className: 'nav-ic' }),
                 React.createElement('span', { className: 'nav-label' }, t(NAV_LABEL[it.k])),
                 it.badge === 'waiting' && waitingCount > 0 && React.createElement('span', { className: 'nav-badge alert' }, waitingCount))));
-          }))),
+          })),
+        // collapse/expand toggle pinned at the bottom of the sidebar
+        React.createElement('button', { className: 'sb-collapse', title: lang === 'th' ? 'พับ/กางเมนู' : 'Collapse / expand', onClick: () => setTweak('sidebar', tweaks.sidebar === 'collapsed' ? 'expanded' : 'collapsed') },
+          React.createElement(Icon, { name: tweaks.sidebar === 'collapsed' ? 'chevR' : 'chevL', size: 16, className: 'nav-ic' }),
+          React.createElement('span', { className: 'nav-label' }, lang === 'th' ? 'พับเมนู' : 'Collapse'))),
       // Main
       React.createElement('div', { className: 'main' },
         React.createElement('header', { className: 'topbar' },
