@@ -210,23 +210,35 @@
   }
 
   /* ---------------- Customer Orders ---------------- */
-  // Derived status badge: mirrors the order-flow cards (scheduled→กำลังผลิต,
-  // completed→ผลิตเสร็จ or รับเข้าคลังเสร็จ) without changing order.status itself.
+  // Derived order status (mirrors the order-flow cards) — used by both the status
+  // badge and the status filter so they always agree. order.status is never changed.
+  const ORDER_STATUS_ORDER = ['request', 'waiting', 'reserved', 'scheduled', 'inprogress', 'produced', 'fgdone'];
+  const ORDER_STATUS = {
+    request:    { th: 'ขอเปิดผลิต',     en: 'Request',       c: 'var(--text-muted)',   bg: 'var(--surface-3)' },
+    waiting:    { th: 'รอวัตถุดิบ',      en: 'Waiting',       c: 'var(--st-waiting)',   bg: 'var(--warn-tint)' },
+    reserved:   { th: 'จองวัตถุดิบ',     en: 'Reserved',      c: 'var(--st-reserved)',  bg: 'var(--primary-tint)' },
+    scheduled:  { th: 'จัดตารางแล้ว',    en: 'Scheduled',     c: 'var(--st-scheduled)', bg: 'var(--primary-tint)' },
+    inprogress: { th: 'กำลังผลิต',       en: 'In production', c: 'var(--primary)',      bg: 'var(--primary-tint)' },
+    produced:   { th: 'ผลิตเสร็จ',       en: 'Produced',      c: 'var(--st-completed)', bg: 'var(--ok-tint)' },
+    fgdone:     { th: 'รับเข้าคลังเสร็จ', en: 'FG received',   c: '#fff',                bg: 'var(--primary)' },
+  };
+  function derivedStatusKey(o, pr) {
+    if (o.status === 'scheduled') return pr.started ? 'inprogress' : 'scheduled';
+    if (o.status === 'completed') return pr.received >= o.qty ? 'fgdone' : 'produced';
+    return o.status; // request / waiting / reserved
+  }
   function orderStatusBadge(o, pr, lang) {
-    if (o.status === 'scheduled' && pr.started) {
-      return React.createElement('span', { className: 'badge', style: { color: 'var(--primary)', background: 'var(--primary-tint)' } }, lang === 'th' ? '● กำลังผลิต' : '● In production');
-    }
-    if (o.status === 'completed') {
-      if (pr.received >= o.qty) return React.createElement('span', { className: 'badge', style: { color: '#fff', background: 'var(--primary)' } }, lang === 'th' ? 'รับเข้าคลังเสร็จ' : 'FG received');
-      return React.createElement('span', { className: 'badge', style: { color: 'var(--st-completed)', background: 'var(--ok-tint)' } }, lang === 'th' ? 'ผลิตเสร็จ' : 'Produced');
-    }
-    return React.createElement(StatusBadge, { status: o.status });
+    const s = ORDER_STATUS[derivedStatusKey(o, pr)] || { th: o.status, en: o.status, c: 'var(--text-muted)', bg: 'var(--surface-3)' };
+    return React.createElement('span', { className: 'badge', style: { color: s.c, background: s.bg } }, lang === 'th' ? s.th : s.en);
   }
 
   function CustomerOrders({ state, setState, go, canDelete }) {
     const { t, lang } = useI18n();
     const toast = useToast();
     const [show, setShow] = React.useState(false);
+    const [q, setQ] = React.useState('');
+    const [statusSel, setStatusSel] = React.useState([]); // empty = show all
+    const toggleStatus = (k) => setStatusSel(p => p.includes(k) ? p.filter(x => x !== k) : [...p, k]);
 
     function add(f) {
       const id = f.id.trim();
@@ -237,9 +249,36 @@
     function prev_exists(s, id) { return s.orders.some(o => o.id === id); }
     function del(id) { setState(prev => ({ ...prev, orders: prev.orders.filter(o => o.id !== id) })); toast(t('toast.deleted'), 'warn'); }
 
+    // apply search (order id / customer / product) + status multi-select
+    const needle = q.trim().toLowerCase();
+    const filtered = state.orders.filter(o => {
+      const pr = D.orderProgress(state, o);
+      if (statusSel.length && !statusSel.includes(derivedStatusKey(o, pr))) return false;
+      if (needle) {
+        const hay = (o.id + ' ' + (o.customer || '') + ' ' + D.fgName(state, o.fg, lang)).toLowerCase();
+        if (!hay.includes(needle)) return false;
+      }
+      return true;
+    });
+
     return React.createElement('div', null,
       React.createElement(PageHead, { title: t('nav.orders'), sub: t('navsec.planning'),
         actions: React.createElement('button', { className: 'btn btn-pri', onClick: () => setShow(true) }, React.createElement(Icon, { name: 'plus', size: 15 }), t('btn.new')) }),
+      // Filter bar
+      React.createElement('div', { className: 'card', style: { marginBottom: 'var(--gap)', padding: 12 } },
+        React.createElement('div', { className: 'row', style: { gap: 10, flexWrap: 'wrap', alignItems: 'center' } },
+          React.createElement('input', { className: 'input', style: { flex: '1 1 260px', minWidth: 200 }, placeholder: lang === 'th' ? 'ค้นหา เลขที่คำสั่งซื้อ / ลูกค้า / สินค้า' : 'Search order no. / customer / product', value: q, onChange: e => setQ(e.target.value) }),
+          React.createElement('span', { className: 'badge badge-soft', style: { fontSize: 11 } }, filtered.length + ' / ' + state.orders.length),
+          (q || statusSel.length > 0) && React.createElement('button', { className: 'btn btn-sm', onClick: () => { setQ(''); setStatusSel([]); } }, lang === 'th' ? 'ล้างตัวกรอง' : 'Clear')),
+        React.createElement('div', { className: 'row', style: { gap: 6, flexWrap: 'wrap', marginTop: 10, alignItems: 'center' } },
+          React.createElement('span', { className: 'faint', style: { fontSize: 11, marginRight: 2 } }, lang === 'th' ? 'สถานะ:' : 'Status:'),
+          ORDER_STATUS_ORDER.map(k => {
+            const on = statusSel.includes(k); const s = ORDER_STATUS[k];
+            return React.createElement('button', { key: k, onClick: () => toggleStatus(k),
+              style: { fontSize: 11, padding: '3px 11px', borderRadius: 20, cursor: 'pointer', border: '1px solid ' + (on ? s.c : 'var(--border)'), background: on ? s.bg : 'var(--surface)', color: on ? s.c : 'var(--text-muted)', fontWeight: on ? 700 : 500 } },
+              lang === 'th' ? s.th : s.en);
+          }),
+          statusSel.length === 0 && React.createElement('span', { className: 'faint', style: { fontSize: 10.5 } }, lang === 'th' ? '(ไม่เลือก = แสดงทั้งหมด)' : '(none = show all)'))),
       React.createElement('div', { className: 'card' },
         React.createElement('table', { className: 'tbl' },
           React.createElement('thead', null, React.createElement('tr', null,
@@ -248,9 +287,9 @@
             React.createElement('th', { className: 'num' }, lang === 'th' ? 'ผลิตเสร็จ' : 'Produced'),
             React.createElement('th', { className: 'num' }, lang === 'th' ? 'รับเข้า FG' : 'FG received'),
             React.createElement('th', null, t('f.duedate')), React.createElement('th', null, t('f.priority')), React.createElement('th', null, t('f.status')), React.createElement('th', { style: { width: 60 } }, ''))),
-          React.createElement('tbody', null, state.orders.length === 0
+          React.createElement('tbody', null, filtered.length === 0
             ? React.createElement('tr', null, React.createElement('td', { colSpan: 10, className: 'empty' }, t('tbl.noresults')))
-            : state.orders.map(o => {
+            : filtered.map(o => {
             const pr = D.orderProgress(state, o);
             return React.createElement('tr', { key: o.id, className: 'clickrow' },
             React.createElement('td', { className: 'mono', style: { fontWeight: 600, color: 'var(--primary)' }, onClick: () => go('flow') }, o.id),
