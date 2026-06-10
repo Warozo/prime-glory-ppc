@@ -91,7 +91,7 @@
     // default to first FG that has stock
     const firstFg = (state.fg.find(x => lotsFor(x.code).length > 0) || state.fg[0]).code;
     const firstLot = (lotsFor(firstFg)[0] || {}).lot || '';
-    const [f, setF] = React.useState({ id: '', customer: state.customers[0], rep: '', date: state.today, lines: [{ fg: firstFg, lot: firstLot, qty: '' }] });
+    const [f, setF] = React.useState({ id: '', customer: '', rep: '', date: state.today, lines: [{ fg: firstFg, lot: firstLot, qty: '' }] });
     const set = (k, v) => setF(p => ({ ...p, [k]: v }));
     const setLine = (i, k, v) => setF(p => ({ ...p, lines: p.lines.map((l, idx) => {
       if (idx !== i) return l;
@@ -104,7 +104,7 @@
     const delLine = (i) => setF(p => ({ ...p, lines: p.lines.filter((_, idx) => idx !== i) }));
 
     const lineErr = (l) => { const q = +l.qty; if (!q || q <= 0) return true; if (!l.lot) return true; return q > lotQty(l.fg, l.lot); };
-    const valid = f.id.trim() && f.lines.length > 0 && f.lines.every(l => !lineErr(l));
+    const valid = f.id.trim() && f.customer.trim() && f.lines.length > 0 && f.lines.every(l => !lineErr(l));
 
     const rows = f.lines.map((l, i) => {
       const lots = lotsFor(l.fg);
@@ -132,7 +132,7 @@
       e('div', { className: 'grid g-2', style: { gap: 12, marginBottom: 16 } },
         e('div', { style: { gridColumn: 'span 2' } }, e(Field, { label: t('fgs.docno'), required: true, hint: lang === 'th' ? 'เช่น INV-2026-001' : 'e.g. INV-2026-001' },
           e('input', { className: 'input mono', value: f.id, onChange: ev => set('id', ev.target.value), placeholder: 'INV-____' }))),
-        e(Field, { label: t('f.customer'), required: true }, e('select', { className: 'select', value: f.customer, onChange: ev => set('customer', ev.target.value) }, state.customers.map(c => e('option', { key: c }, c)))),
+        e(Field, { label: t('f.customer'), required: true }, e('input', { className: 'input', value: f.customer, onChange: ev => set('customer', ev.target.value), placeholder: lang === 'th' ? 'ชื่อลูกค้า' : 'Customer name' })),
         e(Field, { label: t('f.date'), required: true }, e(DateField, { value: f.date, onChange: v => set('date', v) })),
         e('div', { style: { gridColumn: 'span 2' } }, e(Field, { label: t('fgs.salesrep') }, e('input', { className: 'input', value: f.rep, onChange: ev => set('rep', ev.target.value), placeholder: lang === 'th' ? 'ชื่อพนักงานขาย' : 'Sales rep name' })))),
       e('div', { style: { borderTop: '1px solid var(--border)', paddingTop: 12 } },
