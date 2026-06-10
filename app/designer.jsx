@@ -86,14 +86,20 @@
       toast(t('toast.saved')); setStepModal(false);
     }
     function editStep(form) {
-      const k = form.key;
-      const patch = (s) => ({ ...s, name: form.name || form.nameTh, nameTh: form.nameTh || form.name, ic: form.ic, type: form.type === 'qa' ? 'qa' : undefined });
+      const oldKey = (stepModal && stepModal.step) ? stepModal.step.key : form.key;
+      const newKey = (form.key || '').trim();
+      if (!newKey) { toast(lang === 'th' ? 'ต้องระบุรหัสขั้นตอน' : 'Step key required', 'warn'); return; }
+      if (newKey !== oldKey && state.stepLib.some(s => s.key === newKey)) { toast(lang === 'th' ? 'รหัสขั้นตอนซ้ำ' : 'Step key already exists', 'warn'); return; }
+      const patch = (s) => ({ ...s, key: newKey, name: form.name || form.nameTh, nameTh: form.nameTh || form.name, ic: form.ic, type: form.type === 'qa' ? 'qa' : undefined });
       setState(prev => ({ ...prev,
-        stepLib: prev.stepLib.map(s => s.key === k ? patch(s) : s),
-        // keep templates in sync with the renamed/retyped library step
-        workflows: prev.workflows.map(w => ({ ...w, steps: w.steps.map(st => st.key === k ? patch(st) : st) })) }));
-      // reflect the change on the canvas too if the step is placed there
-      setSteps(prev => prev.map(st => st.key === k ? patch(st) : st));
+        stepLib: prev.stepLib.map(s => s.key === oldKey ? patch(s) : s),
+        // cascade the rename into every template and any in-progress lot that references the old key
+        workflows: prev.workflows.map(w => ({ ...w, steps: w.steps.map(st => st.key === oldKey ? patch(st) : st) })),
+        lotsWip: prev.lotsWip.map(l => ({ ...l,
+          stations: l.stations.map(st => st.step === oldKey ? { ...st, step: newKey } : st),
+          outputLog: (l.outputLog || []).map(x => x.step === oldKey ? { ...x, step: newKey } : x) })) }));
+      // reflect the change on the open canvas too
+      setSteps(prev => prev.map(st => st.key === oldKey ? patch(st) : st));
       toast(t('toast.saved')); setStepModal(false);
     }
 
@@ -178,7 +184,7 @@
       footer: e(React.Fragment, null, e('button', { className: 'btn', onClick: onClose }, t('btn.cancel')),
         e('button', { className: 'btn btn-pri', disabled: !f.key.trim() || (!f.nameTh && !f.name), onClick: () => onSubmit(f) }, t('btn.save'))) },
       e('div', { className: 'grid g-2', style: { gap: 12 } },
-        e('div', { style: { gridColumn: 'span 2' } }, e(Field, { label: (lang === 'th' ? 'รหัสขั้นตอน (key)' : 'Step key'), required: true }, e('input', { className: 'input mono', value: f.key, disabled: !!editing, onChange: ev => set('key', ev.target.value.replace(/\s+/g, '')), placeholder: 'mystep' }))),
+        e('div', { style: { gridColumn: 'span 2' } }, e(Field, { label: (lang === 'th' ? 'รหัสขั้นตอน (key)' : 'Step key'), required: true, hint: editing ? (lang === 'th' ? 'เปลี่ยนรหัสได้ — ระบบจะอัปเดตทุกเทมเพลตและล็อตที่อ้างถึงให้อัตโนมัติ' : 'You may change the key — every template and lot referencing it is updated automatically') : null }, e('input', { className: 'input mono', value: f.key, onChange: ev => set('key', ev.target.value.replace(/\s+/g, '')), placeholder: 'mystep' }))),
         e('div', { style: { gridColumn: 'span 2' } }, e(Field, { label: (lang === 'th' ? 'ประเภทขั้นตอน' : 'Step type') },
           e('div', { className: 'row', style: { gap: 8 } },
             [['normal', lang === 'th' ? 'ปกติ' : 'Normal'], ['qa', lang === 'th' ? 'ตรวจคุณภาพ (QA)' : 'Quality check (QA)']].map(opt => e('button', { key: opt[0], type: 'button', onClick: () => set('type', opt[0]),
