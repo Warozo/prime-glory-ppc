@@ -4,7 +4,7 @@
    ============================================================ */
 (function () {
   const { useI18n } = window.PG_I18N;
-  const { PageHead, Icon, fmt, fmtDate, useToast, PriorityBadge, Modal, Field } = window.PG_UI;
+  const { PageHead, Icon, fmt, fmtDate, useToast, PriorityBadge, Modal, Field, DateField } = window.PG_UI;
   const D = window.PG_DATA;
 
   const DAYS = 12, DAY_W = 62, ROW_H = 58, LABEL_W = 178;
@@ -27,6 +27,20 @@
     const [activeBar, setActiveBar] = React.useState(null);
     const [allocReq, setAllocReq] = React.useState(null); // { po, lineId, startDay, max } — pending split allocation
 
+    // Visible window: choose a date range (quick 7/15/30 days or custom from–to).
+    // Bars stay stored relative to "today"; the window only pans/zooms what is shown,
+    // so a bar can be dragged/stretched freely up to the end of the displayed dates.
+    const def = React.useMemo(() => { const e = new Date(state.today); e.setDate(e.getDate() + 14); return { from: state.today, to: e.toISOString().slice(0, 10) }; }, [state.today]);
+    const [range, setRange] = React.useState(def);
+    const quickRange = (n) => { const e = new Date(state.today); e.setDate(e.getDate() + (n - 1)); setRange({ from: state.today, to: e.toISOString().slice(0, 10) }); };
+    let _d0 = new Date(range.from), _d1 = new Date(range.to);
+    if (isNaN(_d0)) _d0 = new Date(state.today);
+    if (isNaN(_d1)) _d1 = new Date(state.today);
+    if (_d1 < _d0) { const tmp = _d0; _d0 = _d1; _d1 = tmp; }
+    const startOffset = Math.round((_d0 - new Date(state.today)) / 864e5); // window start, in days from today (can be <0)
+    const dayCount = Math.max(1, Math.min(60, Math.round((_d1 - _d0) / 864e5) + 1));
+    const winEnd = startOffset + dayCount; // exclusive end day-index (relative to today)
+
     // How much of a PO is already placed on the board, and how much is left to allocate
     const allocatedOf = (poId) => bars.filter(b => b.po === poId).reduce((a, b) => a + b.qty, 0);
     const remainingOf = (po) => +(po.qty - allocatedOf(po.id)).toFixed(0);
@@ -46,7 +60,7 @@
         lotsWip: prev.lotsWip.map(w => { const b = barsRef.current.find(x => x.id === (w.alloc || w.po)); return b && b.line !== w.line ? { ...w, line: b.line } : w; }) }));
     }
 
-    const dayDate = (i) => { const d = new Date(state.today); d.setDate(d.getDate() + i); return d; };
+    const dayDate = (i) => { const d = new Date(state.today); d.setDate(d.getDate() + startOffset + i); return d; };
 
     function onBarPointerDown(e, bar, mode) {
       e.stopPropagation();
@@ -75,10 +89,10 @@
       setBars(prev => prev.map(b => {
         if (b.id !== d.id) return b;
         if (d.mode === 'resize') {
-          const days = Math.max(1, Math.min(DAYS - b.startDay, d.oDays + dDays));
+          const days = Math.max(1, Math.min(winEnd - b.startDay, d.oDays + dDays)); // stretch up to the displayed range end
           return { ...b, days };
         } else {
-          const startDay = Math.max(0, Math.min(DAYS - b.days, d.oStart + dDays));
+          const startDay = Math.max(0, Math.min(winEnd - b.days, d.oStart + dDays));
           // once production has started on this allocation, keep it on its line (no cross-line move)
           if (barStarted(b)) return { ...b, startDay };
           const dRow = Math.round((e.clientY - d.startY) / (d.rowH || ROW_H));
@@ -106,7 +120,7 @@
       const rect = gridRef.current.getBoundingClientRect();
       // account for horizontal scroll of the gantt grid so the day lands under the cursor
       const x = e.clientX - rect.left - LABEL_W + (gridRef.current.scrollLeft || 0);
-      const startDay = Math.max(0, Math.min(DAYS - 2, Math.floor(x / DAY_W)));
+      const startDay = Math.max(0, Math.min(winEnd - 1, Math.floor(x / DAY_W) + startOffset));
       // ask how much of the (remaining) qty goes on this line — the rest can be dropped elsewhere
       setAllocReq({ po, lineId, startDay, max: rem });
     }
@@ -145,7 +159,14 @@
       toast(t('toast.started'));
     }
 
-    const todayIdx = 0;
+    const todayIdx = -startOffset; // column index of "today" within the window (may be off-window)
+
+    const rangeControls = React.createElement('div', { className: 'row', style: { gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' } },
+      React.createElement('div', { className: 'pill-tabs' },
+        [7, 15, 30].map(n => React.createElement('button', { key: n, className: (startOffset === 0 && dayCount === n) ? 'on' : '', onClick: () => quickRange(n) }, n + (lang === 'th' ? ' วัน' : 'd')))),
+      React.createElement(DateField, { value: range.from, onChange: v => setRange(r => ({ ...r, from: v })), style: { width: 138 } }),
+      React.createElement('span', { className: 'faint' }, '–'),
+      React.createElement(DateField, { value: range.to, onChange: v => setRange(r => ({ ...r, to: v })), style: { width: 138 } }));
 
     const legend = React.createElement('div', { style: { padding: '8px 14px', borderTop: '1px solid var(--border)', display: 'flex', gap: 16, fontSize: 10.5, color: 'var(--text-muted)', flexWrap: 'wrap' } },
       React.createElement('span', { className: 'row', style: { gap: 5 } }, React.createElement(Icon, { name: 'drag', size: 12 }), lang === 'th' ? 'ลากเพื่อย้าย' : 'Drag to move'),
@@ -153,7 +174,7 @@
       React.createElement('span', { className: 'row', style: { gap: 5 } }, React.createElement(Icon, { name: 'play', size: 12 }), t('sch.starthint')));
 
     return React.createElement('div', null,
-      React.createElement(PageHead, { title: t('sch.title'), sub: t('sch.sub') }),
+      React.createElement(PageHead, { title: t('sch.title'), sub: t('sch.sub'), actions: rangeControls }),
       React.createElement('div', { style: { display: 'grid', gridTemplateColumns: '232px 1fr', gap: 14, alignItems: 'start' } },
 
         // Unscheduled pools (two boards)
@@ -206,11 +227,11 @@
         // Gantt grid
         React.createElement('div', { className: 'card', style: { overflow: 'hidden' } },
           React.createElement('div', { ref: gridRef, style: { overflowX: 'auto' } },
-            React.createElement('div', { style: { minWidth: LABEL_W + DAYS * DAY_W } },
+            React.createElement('div', { style: { minWidth: LABEL_W + dayCount * DAY_W } },
               // header
               React.createElement('div', { style: { display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--surface-2)', position: 'sticky', top: 0, zIndex: 2 } },
                 React.createElement('div', { style: { width: LABEL_W, flexShrink: 0, padding: '8px 12px', fontSize: 10.5, fontWeight: 700, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '.5px' } }, t('f.line')),
-                Array.from({ length: DAYS }).map((_, i) => {
+                Array.from({ length: dayCount }).map((_, i) => {
                   const dt = dayDate(i); const wd = dt.getDay();
                   return React.createElement('div', { key: i, style: { width: DAY_W, flexShrink: 0, textAlign: 'center', padding: '6px 0', borderLeft: '1px solid var(--border)', background: i === todayIdx ? 'var(--primary-tint)' : (wd === 0 || wd === 6) ? 'var(--surface-3)' : 'transparent' } },
                     React.createElement('div', { style: { fontSize: 9, color: 'var(--text-faint)' } }, dt.toLocaleDateString(lang === 'th' ? 'th-TH' : 'en-US', { weekday: 'short' })),
@@ -233,12 +254,12 @@
                     onDrop: (e) => onDrop(e, ln.id),
                     className: dropLine === ln.id ? 'drag-over' : '',
                     style: { position: 'relative', flex: 1, display: 'flex' } },
-                    Array.from({ length: DAYS }).map((_, i) => {
+                    Array.from({ length: dayCount }).map((_, i) => {
                       const dt = dayDate(i); const wd = dt.getDay();
                       return React.createElement('div', { key: i, style: { width: DAY_W, flexShrink: 0, borderLeft: '1px solid var(--border)', background: i === todayIdx ? 'rgba(45,91,215,.04)' : (wd === 0 || wd === 6) ? 'var(--surface-2)' : 'transparent' } });
                     }),
                     // bars
-                    lineBars.map(b => React.createElement(Bar, { key: b.id, bar: b, state, lang, t, active: activeBar === b.id, started: barStarted(b), completed: barCompleted(b),
+                    lineBars.map(b => React.createElement(Bar, { key: b.id, bar: b, state, lang, t, startOffset, active: activeBar === b.id, started: barStarted(b), completed: barCompleted(b),
                       onStart: startProduction, onPointerDown: onBarPointerDown }))));
               }))),
           legend)),
@@ -268,11 +289,11 @@
         React.createElement('button', { className: 'btn btn-sm', onClick: () => setQty(String(max)) }, lang === 'th' ? 'ทั้งหมด' : 'All')));
   }
 
-  function Bar({ bar, state, lang, t, active, started, completed, onStart, onPointerDown }) {
+  function Bar({ bar, state, lang, t, startOffset, active, started, completed, onStart, onPointerDown }) {
     const col = completed ? 'var(--ok)' : (LINE_COLORS[bar.line] || '#2d5bd7');
     return React.createElement('div', {
       onPointerDown: (e) => onPointerDown(e, bar, 'move'),
-      style: { position: 'absolute', left: bar.startDay * DAY_W + 3, top: 7, width: bar.days * DAY_W - 6, height: ROW_H - 14,
+      style: { position: 'absolute', left: (bar.startDay - (startOffset || 0)) * DAY_W + 3, top: 7, width: bar.days * DAY_W - 6, height: ROW_H - 14,
         background: 'color-mix(in srgb,' + col + ' 14%, white)', border: '1.5px solid ' + col, borderLeft: '3px solid ' + col,
         borderRadius: 6, padding: '4px 8px', cursor: 'grab', boxShadow: active ? '0 4px 14px rgba(18,32,56,.18)' : 'var(--shadow-sm)',
         zIndex: active ? 5 : 1, overflow: 'hidden', userSelect: 'none', transition: active ? 'none' : 'box-shadow .15s' } },
