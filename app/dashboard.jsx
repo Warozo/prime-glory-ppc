@@ -76,7 +76,7 @@
 
       // Daily output by line — compact line chart + filterable table
       React.createElement('div', { style: { marginBottom: 'var(--gap)' } },
-        React.createElement(DailyOutputPanel, { state: s, lang, t })),
+        React.createElement(DailyOutputPanel, { state: s, lang, t, go })),
 
       // FG stock + near expiry
       React.createElement('div', { className: 'grid g-2' },
@@ -108,7 +108,7 @@
   }
 
   // ---- Daily output: compact line chart + filterable per-line table ----
-  function DailyOutputPanel({ state, lang, t }) {
+  function DailyOutputPanel({ state, lang, t, go }) {
     const s = state;
     const DateField = window.PG_UI.DateField;
     const def = React.useMemo(() => { const f = new Date(s.today); f.setDate(f.getDate() - 14); return { from: f.toISOString().slice(0, 10), to: s.today }; }, [s.today]);
@@ -122,27 +122,31 @@
     const dates = [];
     for (let d = new Date(d0); d <= d1 && dates.length < 60; d.setDate(d.getDate() + 1)) dates.push(d.toISOString().slice(0, 10));
 
-    // per line per day from final-step output
-    const grid = {}; const totalByDate = {};
+    // per line → per production order → per day, from final-step output.
+    // (one order can appear under several lines, supporting split production.)
+    const grid = {};        // line -> po -> date -> qty
+    const lineByDate = {};  // line -> date -> qty (line subtotal)
+    const totalByDate = {}; // date -> qty (grand total)
+    const poInfo = {};      // po -> { fg, order }
     s.lotsWip.forEach(lot => {
       const last = lot.stations[lot.stations.length - 1];
+      poInfo[lot.po] = { fg: lot.fg, order: lot.order };
       (lot.outputLog || []).forEach(e => {
         const isLast = e.step === last.step || e.station === last.name || e.station === last.nameTh;
         if (!isLast) return;
         const dd = e.date || s.today;
         grid[lot.line] = grid[lot.line] || {};
-        grid[lot.line][dd] = (grid[lot.line][dd] || 0) + e.qty;
+        grid[lot.line][lot.po] = grid[lot.line][lot.po] || {};
+        grid[lot.line][lot.po][dd] = (grid[lot.line][lot.po][dd] || 0) + e.qty;
+        lineByDate[lot.line] = lineByDate[lot.line] || {};
+        lineByDate[lot.line][dd] = (lineByDate[lot.line][dd] || 0) + e.qty;
         totalByDate[dd] = (totalByDate[dd] || 0) + e.qty;
       });
     });
-    const linerows = s.lines.filter(l => grid[l.id]).map(l => l.id);
-    const showLines = linerows.length ? linerows : s.lines.map(l => l.id);
+    const showLines = s.lines.filter(l => grid[l.id]).map(l => l.id);
     const grandTotal = dates.reduce((a, iso) => a + (totalByDate[iso] || 0), 0);
     const hasOut = grandTotal > 0;
-
-    // chart: total per day (thin labels when many points)
-    const everyN = Math.ceil(dates.length / 8);
-    const chartData = dates.map((iso, i) => ({ t: (i % everyN === 0) ? fmtDate(iso).slice(0, 5) : '', out: totalByDate[iso] || 0 }));
+    const rowSum = (m) => dates.reduce((a, iso) => a + ((m || {})[iso] || 0), 0);
 
     return React.createElement(Card, { title: t('db.dailyoutput'), icon: 'dashboard',
       actions: React.createElement('div', { className: 'row', style: { gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' } },
@@ -152,30 +156,45 @@
         React.createElement('span', { className: 'faint' }, '–'),
         React.createElement(DateField, { value: range.to, onChange: v => setRange(r => ({ ...r, to: v })), style: { width: 138 } })) },
       hasOut
-        ? React.createElement('div', null,
-            React.createElement(LineChart, { data: chartData, valueKey: 'out', labelKey: 't', height: 130 }),
-            React.createElement('div', { style: { overflowX: 'auto', marginTop: 12, border: '1px solid var(--border)', borderRadius: 8 } },
-              React.createElement('table', { className: 'tbl', style: { minWidth: Math.max(560, 130 + dates.length * 64) } },
-                React.createElement('thead', null, React.createElement('tr', null,
-                  React.createElement('th', { style: { position: 'sticky', left: 0, zIndex: 2, background: 'var(--surface-2)', minWidth: 120 } }, t('f.line')),
-                  dates.map(iso => React.createElement('th', { key: iso, className: 'num', style: { whiteSpace: 'nowrap' } }, fmtDate(iso).slice(0, 5))))),
-                React.createElement('tbody', null,
-                  showLines.map(ln => {
-                    const ln0 = s.lines.find(l => l.id === ln);
-                    return React.createElement('tr', { key: ln },
-                      React.createElement('td', { style: { position: 'sticky', left: 0, zIndex: 1, background: 'var(--surface)', fontWeight: 600, fontSize: 11.5 } },
-                        React.createElement('span', { className: 'row', style: { gap: 6 } },
-                          React.createElement('span', { style: { width: 9, height: 9, borderRadius: 2, background: LINE_COLORS[ln] || '#2d5bd7' } }),
-                          (ln0 ? ln0.name : 'Line ' + ln))),
-                      dates.map(iso => { const v = (grid[ln] || {})[iso]; return React.createElement('td', { key: iso, className: 'num mono', style: { color: v ? 'var(--text)' : 'var(--text-faint)', fontWeight: v ? 600 : 400 } }, v ? fmt(v) : '·'); }));
-                  }),
-                  React.createElement('tr', { style: { borderTop: '2px solid var(--border-strong)' } },
-                    React.createElement('td', { style: { position: 'sticky', left: 0, zIndex: 1, background: 'var(--surface-2)', fontWeight: 700, fontSize: 11.5 } }, t('db.totalrow')),
-                    dates.map(iso => React.createElement('td', { key: iso, className: 'num mono', style: { fontWeight: 700, background: 'var(--surface-2)' } }, totalByDate[iso] ? fmt(totalByDate[iso]) : '·'))))) ))
+        ? React.createElement('div', { style: { overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 8 } },
+            React.createElement('table', { className: 'tbl', style: { minWidth: Math.max(620, 220 + dates.length * 58) } },
+              React.createElement('thead', null, React.createElement('tr', null,
+                React.createElement('th', { style: { position: 'sticky', left: 0, zIndex: 2, background: 'var(--surface-2)', minWidth: 210 } }, lang === 'th' ? 'สายการผลิต / ใบสั่งผลิต' : 'Line / Production order'),
+                dates.map(iso => React.createElement('th', { key: iso, className: 'num', style: { whiteSpace: 'nowrap' } }, fmtDate(iso).slice(0, 5))),
+                React.createElement('th', { className: 'num', style: { background: 'var(--surface-2)', whiteSpace: 'nowrap' } }, lang === 'th' ? 'รวม' : 'Total'))),
+              React.createElement('tbody', null,
+                showLines.reduce((rows, ln) => {
+                  const ln0 = s.lines.find(l => l.id === ln);
+                  const pos = Object.keys(grid[ln] || {});
+                  // line header row (with per-day subtotal)
+                  rows.push(React.createElement('tr', { key: 'L_' + ln, style: { background: 'var(--surface-2)' } },
+                    React.createElement('td', { style: { position: 'sticky', left: 0, zIndex: 1, background: 'var(--surface-2)', fontWeight: 700, fontSize: 11.5 } },
+                      React.createElement('span', { className: 'row', style: { gap: 6 } },
+                        React.createElement('span', { style: { width: 9, height: 9, borderRadius: 2, background: LINE_COLORS[ln] || '#2d5bd7' } }),
+                        (ln0 ? ln0.name : 'Line ' + ln))),
+                    dates.map(iso => { const v = (lineByDate[ln] || {})[iso]; return React.createElement('td', { key: iso, className: 'num mono', style: { fontWeight: 700 } }, v ? fmt(v) : '·'); }),
+                    React.createElement('td', { className: 'num mono', style: { fontWeight: 700, background: 'var(--surface-3)' } }, fmt(rowSum(lineByDate[ln])))));
+                  // one row per production order under this line
+                  pos.forEach(po => {
+                    const info = poInfo[po] || {};
+                    rows.push(React.createElement('tr', { key: ln + '_' + po, className: 'clickrow', onClick: () => go('shopfloor') },
+                      React.createElement('td', { style: { position: 'sticky', left: 0, zIndex: 1, background: 'var(--surface)', paddingLeft: 26 } },
+                        React.createElement('span', { className: 'mono', style: { fontSize: 11, fontWeight: 600, color: 'var(--primary)' } }, po),
+                        React.createElement('span', { className: 'faint', style: { fontSize: 10.5, marginLeft: 6 } }, D.fgName(s, info.fg, lang))),
+                      dates.map(iso => { const v = (grid[ln][po] || {})[iso]; return React.createElement('td', { key: iso, className: 'num mono', style: { color: v ? 'var(--st-completed)' : 'var(--text-faint)', fontWeight: v ? 600 : 400 } }, v ? fmt(v) : '·'); }),
+                      React.createElement('td', { className: 'num mono', style: { fontWeight: 600, background: 'var(--surface-2)' } }, fmt(rowSum(grid[ln][po])))));
+                  });
+                  return rows;
+                }, []).concat([
+                  React.createElement('tr', { key: '_grand', style: { borderTop: '2px solid var(--border-strong)' } },
+                    React.createElement('td', { style: { position: 'sticky', left: 0, zIndex: 1, background: 'var(--surface-2)', fontWeight: 700, fontSize: 11.5 } }, lang === 'th' ? 'รวมทุกสาย' : 'All lines'),
+                    dates.map(iso => React.createElement('td', { key: iso, className: 'num mono', style: { fontWeight: 700, background: 'var(--surface-2)' } }, totalByDate[iso] ? fmt(totalByDate[iso]) : '·')),
+                    React.createElement('td', { className: 'num mono', style: { fontWeight: 700, background: 'var(--surface-3)' } }, fmt(grandTotal)))
+                ]))))
         : React.createElement('div', { className: 'empty', style: { padding: '40px 20px' } },
             React.createElement(Icon, { name: 'dashboard', size: 26, style: { color: 'var(--text-faint)' } }),
             React.createElement('div', { style: { marginTop: 8, fontSize: 12.5 } }, lang === 'th' ? 'ยังไม่มียอดผลิตในช่วงที่เลือก' : 'No output in the selected range'),
-            React.createElement('div', { className: 'faint', style: { fontSize: 11, marginTop: 3 } }, lang === 'th' ? 'ยอดผลิตรายวันต่อสายจะแสดงที่นี่' : 'Daily output per line will appear here')));
+            React.createElement('div', { className: 'faint', style: { fontSize: 11, marginTop: 3 } }, lang === 'th' ? 'ยอดผลิตรายวันต่อสาย แยกตามใบสั่งผลิต จะแสดงที่นี่' : 'Daily output per line, by production order, will appear here')));
   }
 
   // aggregate FG stock by product
