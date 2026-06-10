@@ -146,7 +146,7 @@
 
     // Delete actions are limited to admin and PPC across all modules
     const canDelete = role === 'admin' || role === 'ppc';
-    const props = { state, setState, go, canDelete };
+    const props = { state, setState, go, canDelete, role };
     const waitingCount = (state.orders || []).filter(o => o.status === 'waiting').length;
 
     const curLabel = t(NAV_LABEL[route] || 'nav.dashboard');

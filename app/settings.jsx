@@ -6,17 +6,36 @@
 (function () {
   const { useI18n } = window.PG_I18N;
   const { PageHead, Icon, fmt, Modal, Field, useToast } = window.PG_UI;
+  const D = window.PG_DATA;
   const e = React.createElement;
   const LINE_IDS = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
   const LINE_COLORS = { A: '#2d5bd7', B: '#7b5cd9', C: '#1f8a5b', D: '#e08a1e', E: '#cf3b3b', F: '#0e7490', G: '#9333ea' };
 
-  function Settings({ state, setState, go, canDelete }) {
+  function Settings({ state, setState, go, canDelete, role }) {
     const { t, lang } = useI18n();
     const toast = useToast();
     const [edit, setEdit] = React.useState(null); // line being edited or {id:null} for new
+    const [clearReq, setClearReq] = React.useState(null); // pending data-clear { title, patch }
 
     const usedIds = state.lines.map(l => l.id);
     const freeIds = LINE_IDS.filter(id => !usedIds.includes(id));
+
+    // ---- Admin data cleanup (cascade-aware clears) ----
+    // Transactional flow (orders → production → issues → reservations)
+    const PROD_PATCH = { orders: [], prodOrders: [], scheduleBars: [], lotsWip: [], fgPending: [], issues: [], procurement: {}, reservedByRm: {} };
+    const RM_PATCH = { lots: [], receipts: [], reservedByRm: {} };
+    const FG_PATCH = { fgStock: [] };
+    const GOLIVE_PATCH = Object.assign({}, PROD_PATCH, RM_PATCH, FG_PATCH);
+    async function doClear(req) {
+      const label = await D.snapshotState(state, 'preclear');           // best-effort backup first
+      setState(prev => Object.assign({}, prev, req.patch));
+      setClearReq(null);
+      toast((lang === 'th' ? 'ล้างข้อมูลเรียบร้อย' : 'Data cleared') + (label ? (lang === 'th' ? ' · สำรองไว้: ' : ' · backup: ') + label : ''), 'warn');
+    }
+    const clearRow = (title, desc, count, patch, danger) => e('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', background: danger ? 'var(--danger-tint)' : 'var(--surface-2)' } },
+      e('div', null, e('div', { style: { fontWeight: 600, fontSize: 12.5 } }, title), e('div', { className: 'faint', style: { fontSize: 11, marginTop: 2 } }, desc)),
+      e('button', { className: 'btn btn-sm', disabled: count <= 0, style: { color: 'var(--danger)', borderColor: 'var(--danger)', flexShrink: 0 }, onClick: () => setClearReq({ title, patch }) },
+        e(Icon, { name: 'trash', size: 13 }), (lang === 'th' ? 'ล้าง' : 'Clear') + (count > 0 ? ' (' + count + ')' : '')));
 
     function saveLine(form) {
       setState(prev => {
@@ -89,7 +108,42 @@
                 w.steps.map((s, i) => e('span', { key: i, style: { fontSize: 9.5, background: 'var(--surface-3)', borderRadius: 4, padding: '2px 6px', color: 'var(--text-muted)' } },
                   (i + 1) + '. ' + (lang === 'th' ? s.nameTh : s.name))))))))),
 
+      role === 'admin' && e('div', { className: 'card', style: { marginTop: 14, borderColor: 'color-mix(in srgb,var(--danger) 35%,white)' } },
+        e('div', { className: 'card-h' },
+          e(Icon, { name: 'alert', size: 15, style: { color: 'var(--danger)' } }),
+          e('div', null, e('h3', null, lang === 'th' ? 'การจัดการข้อมูล (เฉพาะแอดมิน)' : 'Data management (admin only)'),
+            e('div', { className: 'sub' }, lang === 'th' ? 'ล้างข้อมูลทดลอง — ระบบสำรองอัตโนมัติก่อนล้างทุกครั้ง' : 'Clear test data — auto-backed up before every clear'))),
+        e('div', { style: { padding: 14, display: 'flex', flexDirection: 'column', gap: 10 } },
+          clearRow(lang === 'th' ? 'ล้างงานผลิต / คำสั่งซื้อทั้งหมด' : 'Clear all orders & production',
+            lang === 'th' ? 'คำสั่งซื้อ, ใบสั่งผลิต, ตารางผลิต, WIP, การเบิก, การจอง' : 'orders, production orders, schedule, WIP, issues, reservations',
+            state.orders.length, PROD_PATCH, false),
+          clearRow(lang === 'th' ? 'ล้างสต๊อกวัตถุดิบ' : 'Clear raw-material stock',
+            lang === 'th' ? 'ล็อตวัตถุดิบ และประวัติรับเข้า' : 'RM lots and receiving history',
+            state.lots.length, RM_PATCH, false),
+          clearRow(lang === 'th' ? 'ล้างสต๊อกสินค้าสำเร็จรูป' : 'Clear finished-goods stock',
+            lang === 'th' ? 'สต๊อกสินค้าสำเร็จรูปทั้งหมด' : 'all finished-goods stock',
+            state.fgStock.length, FG_PATCH, false),
+          clearRow(lang === 'th' ? '🚀 รีเซ็ตเริ่มใช้จริง (ล้างทุกอย่าง ยกเว้นข้อมูลหลัก)' : '🚀 Go-live reset (clear all except master data)',
+            lang === 'th' ? 'ล้างงานผลิต + สต๊อกทั้งหมด · เก็บสินค้า/BOM/สายผลิต/ผู้ใช้' : 'clear all transactions + stock · keep items/BOM/lines/users',
+            state.orders.length + state.lots.length + state.fgStock.length, GOLIVE_PATCH, true))),
+      clearReq && e(ClearModal, { req: clearReq, lang, t, onClose: () => setClearReq(null), onConfirm: () => doClear(clearReq) }),
       edit && e(LineModal, { state, t, lang, line: edit, freeIds, onClose: () => setEdit(null), onSubmit: saveLine }));
+  }
+
+  function ClearModal({ req, lang, t, onClose, onConfirm }) {
+    const [txt, setTxt] = React.useState('');
+    const ok = txt.trim().toUpperCase() === 'CLEAR';
+    return e(Modal, { title: lang === 'th' ? 'ยืนยันการล้างข้อมูล' : 'Confirm data clear', onClose, width: 460,
+      footer: e(React.Fragment, null,
+        e('button', { className: 'btn', onClick: onClose }, t('btn.cancel')),
+        e('button', { className: 'btn btn-pri', disabled: !ok, style: ok ? { background: 'var(--danger)', borderColor: 'var(--danger)' } : null, onClick: onConfirm }, e(Icon, { name: 'trash', size: 14 }), lang === 'th' ? 'ล้างเลย' : 'Clear now')) },
+      e('div', { style: { display: 'flex', gap: 10, alignItems: 'flex-start', background: 'var(--danger-tint)', borderRadius: 8, padding: '12px 14px', marginBottom: 14 } },
+        e(Icon, { name: 'alert', size: 18, style: { color: 'var(--danger)', flexShrink: 0, marginTop: 1 } }),
+        e('div', { style: { fontSize: 12.5 } },
+          e('div', { style: { fontWeight: 700 } }, req.title),
+          e('div', { style: { marginTop: 4, color: 'var(--text-muted)' } }, lang === 'th' ? 'ลบข้อมูลถาวร — แต่ระบบสำรองสถานะปัจจุบันไว้ใน Supabase ก่อน (กู้คืนได้)' : 'Permanently deletes data — current state is backed up to Supabase first (recoverable).'))),
+      e(Field, { label: lang === 'th' ? 'พิมพ์ CLEAR เพื่อยืนยัน' : 'Type CLEAR to confirm', required: true },
+        e('input', { className: 'input mono', value: txt, autoFocus: true, onChange: (ev) => setTxt(ev.target.value), placeholder: 'CLEAR' })));
   }
 
   function LineModal({ state, t, lang, line, freeIds, onClose, onSubmit }) {

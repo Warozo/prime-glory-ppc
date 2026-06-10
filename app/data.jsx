@@ -255,6 +255,20 @@
   function fgOnHand(s, code) { return s.fgStock.filter(x => x.fg === code).reduce((a, x) => a + x.qty, 0); }
 
   /* ---- Persistence: whole-state snapshot in Supabase (id='main') ---- */
+  // Best-effort backup of the current state into app_state_v1_snapshot before a
+  // destructive admin action. Returns the snapshot label, or false if it failed.
+  async function snapshotState(state, prefix) {
+    if (!_supa) return false;
+    const label = (prefix || 'live') + '-' + new Date().toISOString().slice(0, 19);
+    try {
+      const { error } = await _supa.from('app_state_v1_snapshot').insert({
+        id: 'main', data: state, client_id: 'admin-clear',
+        updated_at: new Date().toISOString(), snapshot_created_at: new Date().toISOString(), snapshot_version: label });
+      if (error) { console.warn('snapshotState:', error.message); return false; }
+      return label;
+    } catch (e) { console.warn('snapshotState error:', e); return false; }
+  }
+
   // Load the shared snapshot; seed it on first run. 'today' is always refreshed
   // to the real current date so countdowns stay live even on an old snapshot.
   async function loadState() {
@@ -298,5 +312,5 @@
     return function () { try { _supa.removeChannel(ch); } catch (e) {} };
   }
 
-  window.PG_DATA = { buildState, loadState, saveState, subscribe, genId, fgName, rmName, rmOnHand, rmLotsFEFO, rmReserved, rmAvailable, rmUnit, fgOnHand, bomRequirement, workflowForLine, buildWipLot, orderProgress, STEP_LIB, PROC_STATUS };
+  window.PG_DATA = { buildState, loadState, saveState, subscribe, snapshotState, genId, fgName, rmName, rmOnHand, rmLotsFEFO, rmReserved, rmAvailable, rmUnit, fgOnHand, bomRequirement, workflowForLine, buildWipLot, orderProgress, STEP_LIB, PROC_STATUS };
 })();
