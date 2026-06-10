@@ -66,8 +66,10 @@
       e.stopPropagation();
       e.preventDefault();
       // measure the ACTUAL rendered day-cell width and row height so the drag
-      // tracks the cursor even if CSS/zoom makes them differ from the constants
-      const cellsDiv = e.currentTarget.parentElement;            // bars live inside the day-cells container
+      // tracks the cursor even if CSS/zoom makes them differ from the constants.
+      // NOTE: for resize, e.currentTarget is the handle (a child of the bar), so step up to the bar first.
+      const barEl = (mode === 'resize') ? e.currentTarget.parentElement : e.currentTarget;
+      const cellsDiv = barEl ? barEl.parentElement : null;       // bars live inside the day-cells container
       const rowEl = cellsDiv ? cellsDiv.parentElement : null;
       const dayCell = cellsDiv ? cellsDiv.querySelector('div') : null; // first child = first day cell
       const dayW = dayCell ? dayCell.getBoundingClientRect().width : DAY_W;
