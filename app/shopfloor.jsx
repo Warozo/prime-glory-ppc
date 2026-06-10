@@ -353,24 +353,25 @@
     const cols = HOUR_SLOTS;
     const LINE_COLORS = { A: '#2d5bd7', B: '#7b5cd9', C: '#1f8a5b', D: '#e08a1e', E: '#cf3b3b', F: '#0e7490', G: '#9333ea' };
 
-    const cum = {};      // line -> po -> { defect, rework, fg }
-    const hourly = {};   // line -> po -> hourKey -> defect qty (selected day)
+    // break down by EACH QA station (a process can have several QA steps)
+    const cum = {};      // line -> po -> stationIdx -> { defect, rework, name, fg }
+    const hourly = {};   // line -> po -> stationIdx -> hourKey -> defect qty (selected day)
     let totDefect = 0, totRework = 0;
     s.lotsWip.forEach(lot => {
       let lotHasQA = false;
-      lot.stations.forEach(st => {
+      lot.stations.forEach((st, idx) => {
         if (st.type !== 'qa') return;
         lotHasQA = true;
         const d = st.cumDefect || 0, r = st.reworkDone || 0;
+        totDefect += d; totRework += r;
         if (d === 0 && r === 0) return;
         cum[lot.line] = cum[lot.line] || {};
-        cum[lot.line][lot.po] = cum[lot.line][lot.po] || { defect: 0, rework: 0, fg: lot.fg };
-        cum[lot.line][lot.po].defect += d; cum[lot.line][lot.po].rework += r;
-        totDefect += d; totRework += r;
+        cum[lot.line][lot.po] = cum[lot.line][lot.po] || {};
+        cum[lot.line][lot.po][idx] = { defect: d, rework: r, name: lang === 'th' ? st.nameTh : st.name, fg: lot.fg };
       });
       if (!lotHasQA) return;
       (lot.outputLog || []).forEach(e => {
-        if (!(e.defect > 0)) return;
+        if (!(e.defect > 0) || e.stepIdx == null) return;
         if ((e.date || s.today) !== day) return;
         const hr = parseInt((e.time || '00:00').slice(0, 2), 10);
         let slot = cols.find(sl => sl.k !== 'lunch' && sl.start === hr);
@@ -378,7 +379,8 @@
         if (!slot) slot = hr < 8 ? cols[0] : cols[cols.length - 1];
         hourly[lot.line] = hourly[lot.line] || {};
         hourly[lot.line][lot.po] = hourly[lot.line][lot.po] || {};
-        hourly[lot.line][lot.po][slot.k] = (hourly[lot.line][lot.po][slot.k] || 0) + e.defect;
+        hourly[lot.line][lot.po][e.stepIdx] = hourly[lot.line][lot.po][e.stepIdx] || {};
+        hourly[lot.line][lot.po][e.stepIdx][slot.k] = (hourly[lot.line][lot.po][e.stepIdx][slot.k] || 0) + e.defect;
       });
     });
     const lineIds = s.lines.filter(l => cum[l.id]).map(l => l.id);
@@ -405,15 +407,15 @@
           : React.createElement('div', { style: { overflowX: 'auto' } },
               React.createElement('table', { className: 'tbl', style: { minWidth: Math.max(760, 280 + cols.length * 54) } },
                 React.createElement('thead', null, React.createElement('tr', null,
-                  React.createElement('th', { style: { position: 'sticky', left: 0, zIndex: 2, background: 'var(--surface-2)', minWidth: 210 } }, lang === 'th' ? 'สาย / ใบสั่งผลิต' : 'Line / Order'),
+                  React.createElement('th', { style: { position: 'sticky', left: 0, zIndex: 2, background: 'var(--surface-2)', minWidth: 230 } }, lang === 'th' ? 'สาย / ใบสั่งผลิต · ขั้น QA' : 'Line / Order · QA step'),
                   cols.map(c => React.createElement('th', { key: c.k, className: 'num', style: { whiteSpace: 'nowrap', textAlign: c.k === 'lunch' ? 'center' : 'right', background: c.k === 'lunch' ? 'var(--surface-3)' : 'var(--surface-2)' } }, c.k === 'lunch' ? (lang === 'th' ? 'พักเที่ยง' : 'Lunch') : c.label)),
                   React.createElement('th', { className: 'num', style: { background: 'var(--surface-2)', whiteSpace: 'nowrap' } }, lang === 'th' ? 'Defect รวม' : 'Defect'),
                   React.createElement('th', { className: 'num', style: { background: 'var(--surface-2)', whiteSpace: 'nowrap' } }, lang === 'th' ? 'รอ Rework' : 'Pending'))),
                 React.createElement('tbody', null,
                   lineIds.reduce((rows, ln) => {
                     const ln0 = s.lines.find(l => l.id === ln);
-                    const lineDefect = Object.values(cum[ln]).reduce((a, x) => a + x.defect, 0);
-                    const linePending = Object.values(cum[ln]).reduce((a, x) => a + (x.defect - x.rework), 0);
+                    let lineDefect = 0, linePending = 0;
+                    Object.keys(cum[ln]).forEach(po => Object.keys(cum[ln][po]).forEach(idx => { const x = cum[ln][po][idx]; lineDefect += x.defect; linePending += (x.defect - x.rework); }));
                     rows.push(React.createElement('tr', { key: 'L_' + ln, style: { background: 'var(--surface-2)' } },
                       React.createElement('td', { style: { position: 'sticky', left: 0, zIndex: 1, background: 'var(--surface-2)', fontWeight: 700, fontSize: 11.5 } },
                         React.createElement('span', { className: 'row', style: { gap: 6 } },
@@ -422,15 +424,20 @@
                       cols.map(c => React.createElement('td', { key: c.k, style: { background: c.k === 'lunch' ? 'var(--surface-3)' : 'transparent' } }, '')),
                       React.createElement('td', { className: 'num mono', style: { fontWeight: 700, color: 'var(--danger)' } }, fmt(lineDefect)),
                       React.createElement('td', { className: 'num mono', style: { fontWeight: 700, color: linePending > 0 ? 'var(--warn)' : 'var(--text-faint)' } }, fmt(linePending))));
+                    // one row per (order × QA station) so multiple QA steps show separately
                     Object.keys(cum[ln]).forEach(po => {
-                      const info = cum[ln][po];
-                      rows.push(React.createElement('tr', { key: ln + '_' + po, className: 'clickrow', onClick: () => go('shopfloor') },
-                        React.createElement('td', { style: { position: 'sticky', left: 0, zIndex: 1, background: 'var(--surface)', paddingLeft: 26 } },
-                          React.createElement('span', { className: 'mono', style: { fontSize: 11, fontWeight: 600, color: 'var(--primary)' } }, po),
-                          React.createElement('span', { className: 'faint', style: { fontSize: 10.5, marginLeft: 6 } }, D.fgName(s, info.fg, lang))),
-                        cols.map(c => { const v = ((hourly[ln] || {})[po] || {})[c.k]; return React.createElement('td', { key: c.k, className: 'num mono', style: { background: c.k === 'lunch' ? 'var(--surface-3)' : 'transparent', color: v ? 'var(--danger)' : 'var(--text-faint)', fontWeight: v ? 700 : 400 } }, v ? fmt(v) : '·'); }),
-                        React.createElement('td', { className: 'num mono', style: { fontWeight: 600, color: 'var(--danger)' } }, fmt(info.defect)),
-                        React.createElement('td', { className: 'num mono', style: { fontWeight: 600, color: (info.defect - info.rework) > 0 ? 'var(--warn)' : 'var(--text-faint)' } }, fmt(info.defect - info.rework))));
+                      Object.keys(cum[ln][po]).forEach(idx => {
+                        const info = cum[ln][po][idx];
+                        rows.push(React.createElement('tr', { key: ln + '_' + po + '_' + idx, className: 'clickrow', onClick: () => go('shopfloor') },
+                          React.createElement('td', { style: { position: 'sticky', left: 0, zIndex: 1, background: 'var(--surface)', paddingLeft: 26 } },
+                            React.createElement('div', { className: 'row', style: { gap: 6 } },
+                              React.createElement('span', { className: 'mono', style: { fontSize: 10.5, fontWeight: 600, color: 'var(--primary)' } }, po),
+                              React.createElement('span', { style: { fontSize: 11, fontWeight: 600 } }, info.name)),
+                            React.createElement('div', { className: 'faint', style: { fontSize: 9.5, marginTop: 1 } }, D.fgName(s, info.fg, lang))),
+                          cols.map(c => { const v = (((hourly[ln] || {})[po] || {})[idx] || {})[c.k]; return React.createElement('td', { key: c.k, className: 'num mono', style: { background: c.k === 'lunch' ? 'var(--surface-3)' : 'transparent', color: v ? 'var(--danger)' : 'var(--text-faint)', fontWeight: v ? 700 : 400 } }, v ? fmt(v) : '·'); }),
+                          React.createElement('td', { className: 'num mono', style: { fontWeight: 600, color: 'var(--danger)' } }, fmt(info.defect)),
+                          React.createElement('td', { className: 'num mono', style: { fontWeight: 600, color: (info.defect - info.rework) > 0 ? 'var(--warn)' : 'var(--text-faint)' } }, fmt(info.defect - info.rework))));
+                      });
                     });
                     return rows;
                   }, []))))));
