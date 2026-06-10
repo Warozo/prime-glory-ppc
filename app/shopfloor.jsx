@@ -22,6 +22,7 @@
     }));
     const [selId, setSelId] = React.useState(lots[0] ? lots[0].id : null);
     const [report, setReport] = React.useState(null); // {lotId, stepIdx}
+    const [reworkReq, setReworkReq] = React.useState(null); // {lotId, stepIdx, pending, station}
 
     const lot = lots.find(l => l.id === selId) || lots[0];
 
@@ -81,19 +82,20 @@
 
     // QA station: move all pending rework (defects not yet reworked) back into good output,
     // which then flows forward like normal output. Updates FG-pending/completion if it's the last station.
-    function reworkDefects(lotId, stepIdx) {
+    function reworkDefects(lotId, stepIdx, qty) {
       setState(prev => {
         const target = prev.lotsWip.find(l => l.id === lotId);
         if (!target) return prev;
         const sp = target.stations[stepIdx];
         const pending = Math.max(0, (sp.cumDefect || 0) - (sp.reworkDone || 0));
-        if (pending <= 0) return prev;
+        const amt = Math.max(0, Math.min(Math.round(qty || 0), pending)); // allow partial rework
+        if (amt <= 0) return prev;
         const now = new Date(); const time = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
         const lotsWip = prev.lotsWip.map(l => {
           if (l.id !== lotId) return l;
-          const stations = l.stations.map((st, i) => i === stepIdx ? { ...st, cumOut: st.cumOut + pending, reworkDone: (st.reworkDone || 0) + pending } : st);
+          const stations = l.stations.map((st, i) => i === stepIdx ? { ...st, cumOut: st.cumOut + amt, reworkDone: (st.reworkDone || 0) + amt } : st);
           const stepName = lang === 'th' ? l.stations[stepIdx].nameTh : l.stations[stepIdx].name;
-          const outputLog = [{ time, date: prev.today, step: l.stations[stepIdx].step, stepIdx, station: stepName, qty: pending, rework: true }, ...(l.outputLog || [])];
+          const outputLog = [{ time, date: prev.today, step: l.stations[stepIdx].step, stepIdx, station: stepName, qty: amt, rework: true }, ...(l.outputLog || [])];
           return { ...l, stations, outputLog };
         });
         const after = lotsWip.find(l => l.id === lotId);
@@ -188,8 +190,8 @@
                         React.createElement('div', { style: { marginTop: 7 } }, React.createElement(Progress, { value: out / lot.qty * 100, color: full ? 'var(--ok)' : 'var(--primary)', height: 5 })),
                         !isComplete(lot) && wip > 0 && React.createElement('button', { className: 'btn btn-sm btn-pri', style: { width: '100%', marginTop: 8 }, onClick: () => setReport({ lotId: lot.id, stepIdx: i }) },
                           React.createElement(Icon, { name: 'arrowR', size: 12 }), t('btn.report')),
-                        isQA && pending > 0 && React.createElement('button', { className: 'btn btn-sm', style: { width: '100%', marginTop: 6, color: 'var(--ok)', borderColor: 'var(--ok)' }, onClick: () => reworkDefects(lot.id, i) },
-                          React.createElement(Icon, { name: 'check', size: 12 }), lang === 'th' ? 'Rework เสร็จสิ้น' : 'Rework done'),
+                        isQA && pending > 0 && React.createElement('button', { className: 'btn btn-sm', style: { width: '100%', marginTop: 6, color: 'var(--ok)', borderColor: 'var(--ok)' }, onClick: () => setReworkReq({ lotId: lot.id, stepIdx: i, pending, station: lang === 'th' ? st.nameTh : st.name }) },
+                          React.createElement(Icon, { name: 'check', size: 12 }), lang === 'th' ? 'ส่งยอด Rework' : 'Send rework'),
                         locked && React.createElement('div', { style: { width: '100%', marginTop: 8, fontSize: 10, color: 'var(--text-faint)', display: 'flex', gap: 5, alignItems: 'center', justifyContent: 'center', padding: '5px 0', border: '1px dashed var(--border-strong)', borderRadius: 5 } },
                           React.createElement(Icon, { name: 'lock', size: 11 }), lang === 'th' ? 'รอขั้นก่อนหน้า' : 'Awaiting previous'),
                         full && React.createElement('div', { style: { width: '100%', marginTop: 8, fontSize: 10, color: 'var(--ok)', display: 'flex', gap: 5, alignItems: 'center', justifyContent: 'center', fontWeight: 600 } },
@@ -219,7 +221,27 @@
         const maxQ = ci - inspected;
         return React.createElement(ReportModal, { lot: rl, stepIdx: i, isQA, maxQ, today: state.today, t, lang,
           onClose: () => setReport(null), onSubmit: (qty, time, date, defect) => { applyOutput(report.lotId, i, qty, time, date, defect); setReport(null); } });
-      })());
+      })(),
+      reworkReq && React.createElement(ReworkModal, { req: reworkReq, t, lang,
+        onClose: () => setReworkReq(null), onSubmit: (q) => { reworkDefects(reworkReq.lotId, reworkReq.stepIdx, q); setReworkReq(null); } }));
+  }
+
+  function ReworkModal({ req, t, lang, onClose, onSubmit }) {
+    const Modal = window.PG_UI.Modal, Field = window.PG_UI.Field, fmt = window.PG_UI.fmt;
+    const [qty, setQty] = React.useState(String(req.pending));
+    const q = Math.max(0, Math.min(Math.round(+qty || 0), req.pending));
+    return React.createElement(Modal, { title: lang === 'th' ? 'ส่งยอด Rework เสร็จ' : 'Send completed rework', onClose, width: 400,
+      footer: React.createElement(React.Fragment, null,
+        React.createElement('button', { className: 'btn', onClick: onClose }, t('btn.cancel')),
+        React.createElement('button', { className: 'btn btn-pri', disabled: q <= 0, onClick: () => onSubmit(q) }, React.createElement(Icon, { name: 'check', size: 14 }), t('btn.confirm'))) },
+      React.createElement('div', { style: { background: 'var(--surface-2)', borderRadius: 8, padding: '10px 12px', marginBottom: 14, fontSize: 12 } },
+        React.createElement('div', { className: 'row', style: { justifyContent: 'space-between' } }, React.createElement('span', { className: 'faint' }, t('f.station')), React.createElement('b', null, req.station)),
+        React.createElement('div', { className: 'row', style: { justifyContent: 'space-between', marginTop: 4 } }, React.createElement('span', { className: 'faint' }, lang === 'th' ? 'ยอดรอ Rework' : 'Pending rework'), React.createElement('b', { className: 'mono', style: { color: 'var(--danger)' } }, fmt(req.pending)))),
+      React.createElement(Field, { label: (lang === 'th' ? 'จำนวนที่ Rework เสร็จ' : 'Quantity reworked'), required: true, hint: lang === 'th' ? 'ส่งบางส่วนได้ ที่เหลือยังค้างรอ Rework' : 'You can send part of it; the rest stays pending' },
+        React.createElement('input', { className: 'input mono', type: 'number', min: 1, max: req.pending, value: qty, autoFocus: true, onChange: (e) => setQty(e.target.value) })),
+      React.createElement('div', { className: 'row', style: { gap: 6, marginTop: 8 } },
+        React.createElement('button', { className: 'btn btn-sm', onClick: () => setQty(String(Math.round(req.pending / 2))) }, '50%'),
+        React.createElement('button', { className: 'btn btn-sm', onClick: () => setQty(String(req.pending)) }, lang === 'th' ? 'ทั้งหมด' : 'All')));
   }
 
   function StatRow({ label, v, color, big }) {
