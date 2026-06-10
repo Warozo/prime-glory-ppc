@@ -24,6 +24,7 @@
     'nav.schedule':    { th: 'ตารางการผลิต', en: 'Production Schedule' },
     'nav.designer':    { th: 'ออกแบบกระบวนการผลิต', en: 'Process Designer' },
     'nav.shopfloor':   { th: 'ติดตามงานระหว่างผลิต', en: 'Shop Floor / WIP' },
+    'nav.qa':          { th: 'กระดานคุณภาพ (QA)', en: 'Quality Board (QA)' },
     'nav.receiving':   { th: 'รับเข้าวัตถุดิบ', en: 'Material Receiving' },
     'nav.issue':       { th: 'เบิกวัตถุดิบ', en: 'Material Issue' },
     'nav.fgreceiving': { th: 'รับเข้าสินค้าสำเร็จรูป', en: 'FG Receiving' },

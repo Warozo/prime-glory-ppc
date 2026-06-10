@@ -344,5 +344,98 @@
       dayTotal === 0 && React.createElement('div', { className: 'faint', style: { fontSize: 11.5, textAlign: 'center', padding: '12px 0' } }, lang === 'th' ? 'ยังไม่มีการบันทึกผลผลิตในวันที่เลือก' : 'No output reported on the selected day'));
   }
 
+  // ---- QA department board: hourly defects + cumulative defect / pending rework per line & order ----
+  function QABoard({ state, go }) {
+    const { t, lang } = useI18n();
+    const s = state;
+    const DateField = window.PG_UI.DateField, Stat = window.PG_UI.Stat;
+    const [day, setDay] = React.useState(s.today);
+    const cols = HOUR_SLOTS;
+    const LINE_COLORS = { A: '#2d5bd7', B: '#7b5cd9', C: '#1f8a5b', D: '#e08a1e', E: '#cf3b3b', F: '#0e7490', G: '#9333ea' };
+
+    const cum = {};      // line -> po -> { defect, rework, fg }
+    const hourly = {};   // line -> po -> hourKey -> defect qty (selected day)
+    let totDefect = 0, totRework = 0;
+    s.lotsWip.forEach(lot => {
+      let lotHasQA = false;
+      lot.stations.forEach(st => {
+        if (st.type !== 'qa') return;
+        lotHasQA = true;
+        const d = st.cumDefect || 0, r = st.reworkDone || 0;
+        if (d === 0 && r === 0) return;
+        cum[lot.line] = cum[lot.line] || {};
+        cum[lot.line][lot.po] = cum[lot.line][lot.po] || { defect: 0, rework: 0, fg: lot.fg };
+        cum[lot.line][lot.po].defect += d; cum[lot.line][lot.po].rework += r;
+        totDefect += d; totRework += r;
+      });
+      if (!lotHasQA) return;
+      (lot.outputLog || []).forEach(e => {
+        if (!(e.defect > 0)) return;
+        if ((e.date || s.today) !== day) return;
+        const hr = parseInt((e.time || '00:00').slice(0, 2), 10);
+        let slot = cols.find(sl => sl.k !== 'lunch' && sl.start === hr);
+        if (hr === 12) slot = cols.find(sl => sl.k === 'lunch');
+        if (!slot) slot = hr < 8 ? cols[0] : cols[cols.length - 1];
+        hourly[lot.line] = hourly[lot.line] || {};
+        hourly[lot.line][lot.po] = hourly[lot.line][lot.po] || {};
+        hourly[lot.line][lot.po][slot.k] = (hourly[lot.line][lot.po][slot.k] || 0) + e.defect;
+      });
+    });
+    const lineIds = s.lines.filter(l => cum[l.id]).map(l => l.id);
+    const hasData = lineIds.length > 0;
+
+    return React.createElement('div', null,
+      React.createElement(PageHead, { title: lang === 'th' ? 'กระดานคุณภาพ (QA)' : 'Quality Board (QA)', sub: lang === 'th' ? 'ติดตาม Defect รายชั่วโมง แยกตามสายผลิตและใบสั่งผลิต' : 'Hourly defects by production line and order' }),
+      React.createElement('div', { className: 'grid g-3', style: { marginBottom: 'var(--gap)' } },
+        React.createElement(Stat, { label: lang === 'th' ? 'Defect สะสมทั้งหมด' : 'Total defects', value: fmt(totDefect), accent: 'var(--danger)', icon: 'alert' }),
+        React.createElement(Stat, { label: lang === 'th' ? 'Rework แล้ว' : 'Reworked', value: fmt(totRework), accent: 'var(--ok)', icon: 'check' }),
+        React.createElement(Stat, { label: lang === 'th' ? 'ยอดรอ Rework' : 'Pending rework', value: fmt(totDefect - totRework), accent: 'var(--warn)', icon: 'clock' })),
+      React.createElement('div', { className: 'card' },
+        React.createElement('div', { className: 'card-h' },
+          React.createElement(Icon, { name: 'qc', size: 15, style: { color: 'var(--danger)' } }),
+          React.createElement('h3', null, lang === 'th' ? 'Defect รายชั่วโมง' : 'Hourly defects'),
+          React.createElement('div', { className: 'card-h-actions row', style: { gap: 10 } },
+            React.createElement('span', { className: 'faint', style: { fontSize: 11.5 } }, lang === 'th' ? 'เลือกวัน' : 'Day'),
+            React.createElement(DateField, { value: day, onChange: setDay, style: { width: 150 } }))),
+        !hasData
+          ? React.createElement('div', { className: 'empty', style: { padding: '40px 20px' } },
+              React.createElement(Icon, { name: 'qc', size: 26, style: { color: 'var(--text-faint)' } }),
+              React.createElement('div', { style: { marginTop: 8, fontSize: 12.5 } }, lang === 'th' ? 'ยังไม่มีข้อมูล Defect จากสถานี QA' : 'No QA defect data yet'),
+              React.createElement('div', { className: 'faint', style: { fontSize: 11, marginTop: 3 } }, lang === 'th' ? 'เมื่อสถานี QA รายงานของเสีย จะแสดงที่นี่' : 'Defects reported at QA stations will appear here'))
+          : React.createElement('div', { style: { overflowX: 'auto' } },
+              React.createElement('table', { className: 'tbl', style: { minWidth: Math.max(760, 280 + cols.length * 54) } },
+                React.createElement('thead', null, React.createElement('tr', null,
+                  React.createElement('th', { style: { position: 'sticky', left: 0, zIndex: 2, background: 'var(--surface-2)', minWidth: 210 } }, lang === 'th' ? 'สาย / ใบสั่งผลิต' : 'Line / Order'),
+                  cols.map(c => React.createElement('th', { key: c.k, className: 'num', style: { whiteSpace: 'nowrap', textAlign: c.k === 'lunch' ? 'center' : 'right', background: c.k === 'lunch' ? 'var(--surface-3)' : 'var(--surface-2)' } }, c.k === 'lunch' ? (lang === 'th' ? 'พักเที่ยง' : 'Lunch') : c.label)),
+                  React.createElement('th', { className: 'num', style: { background: 'var(--surface-2)', whiteSpace: 'nowrap' } }, lang === 'th' ? 'Defect รวม' : 'Defect'),
+                  React.createElement('th', { className: 'num', style: { background: 'var(--surface-2)', whiteSpace: 'nowrap' } }, lang === 'th' ? 'รอ Rework' : 'Pending'))),
+                React.createElement('tbody', null,
+                  lineIds.reduce((rows, ln) => {
+                    const ln0 = s.lines.find(l => l.id === ln);
+                    const lineDefect = Object.values(cum[ln]).reduce((a, x) => a + x.defect, 0);
+                    const linePending = Object.values(cum[ln]).reduce((a, x) => a + (x.defect - x.rework), 0);
+                    rows.push(React.createElement('tr', { key: 'L_' + ln, style: { background: 'var(--surface-2)' } },
+                      React.createElement('td', { style: { position: 'sticky', left: 0, zIndex: 1, background: 'var(--surface-2)', fontWeight: 700, fontSize: 11.5 } },
+                        React.createElement('span', { className: 'row', style: { gap: 6 } },
+                          React.createElement('span', { style: { width: 9, height: 9, borderRadius: 2, background: LINE_COLORS[ln] || '#888' } }),
+                          (ln0 ? ln0.name : 'Line ' + ln))),
+                      cols.map(c => React.createElement('td', { key: c.k, style: { background: c.k === 'lunch' ? 'var(--surface-3)' : 'transparent' } }, '')),
+                      React.createElement('td', { className: 'num mono', style: { fontWeight: 700, color: 'var(--danger)' } }, fmt(lineDefect)),
+                      React.createElement('td', { className: 'num mono', style: { fontWeight: 700, color: linePending > 0 ? 'var(--warn)' : 'var(--text-faint)' } }, fmt(linePending))));
+                    Object.keys(cum[ln]).forEach(po => {
+                      const info = cum[ln][po];
+                      rows.push(React.createElement('tr', { key: ln + '_' + po, className: 'clickrow', onClick: () => go('shopfloor') },
+                        React.createElement('td', { style: { position: 'sticky', left: 0, zIndex: 1, background: 'var(--surface)', paddingLeft: 26 } },
+                          React.createElement('span', { className: 'mono', style: { fontSize: 11, fontWeight: 600, color: 'var(--primary)' } }, po),
+                          React.createElement('span', { className: 'faint', style: { fontSize: 10.5, marginLeft: 6 } }, D.fgName(s, info.fg, lang))),
+                        cols.map(c => { const v = ((hourly[ln] || {})[po] || {})[c.k]; return React.createElement('td', { key: c.k, className: 'num mono', style: { background: c.k === 'lunch' ? 'var(--surface-3)' : 'transparent', color: v ? 'var(--danger)' : 'var(--text-faint)', fontWeight: v ? 700 : 400 } }, v ? fmt(v) : '·'); }),
+                        React.createElement('td', { className: 'num mono', style: { fontWeight: 600, color: 'var(--danger)' } }, fmt(info.defect)),
+                        React.createElement('td', { className: 'num mono', style: { fontWeight: 600, color: (info.defect - info.rework) > 0 ? 'var(--warn)' : 'var(--text-faint)' } }, fmt(info.defect - info.rework))));
+                    });
+                    return rows;
+                  }, []))))));
+  }
+
   window.PG_ShopFloor = ShopFloor;
+  window.PG_QA = QABoard;
 })();
