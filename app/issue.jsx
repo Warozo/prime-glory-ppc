@@ -43,7 +43,7 @@
             const lot = lots.find(l => l.id === lotId);
             if (!lot) return;
             const take = Math.min(lot.remaining, q);
-            lot.remaining = +(lot.remaining - take).toFixed(2);
+            lot.remaining = +(lot.remaining - take).toFixed(3);
             txns.push({ id: D.genId('ISS'), date: prev.today, time, type: 'po', ref: poId, order: po.order, rm, lot: lot.lot, qty: take, unit: D.rmUnit(prev, rm), reason: '' });
           });
           const r = req.find(x => x.rm === rm);
@@ -64,7 +64,7 @@
           if (p.qty <= 0) return;
           const lot = lots.find(l => l.id === p.lotId); if (!lot) return;
           const take = Math.min(lot.remaining, p.qty);
-          lot.remaining = +(lot.remaining - take).toFixed(2);
+          lot.remaining = +(lot.remaining - take).toFixed(3);
           txns.push({ id: D.genId('ISS'), date: prev.today, time, type: 'add', ref: form.po || '', order: '', rm: form.rm, lot: lot.lot, qty: take, unit: D.rmUnit(prev, form.rm), reason: reasons[form.reason] });
         });
         return { ...prev, lots, issues: [...txns, ...(prev.issues || [])] };
@@ -163,7 +163,7 @@
   // Build FEFO default allocation for a needed qty across lots
   function fefoAlloc(lots, need) {
     const picks = {}; let rem = need;
-    for (const l of lots) { if (rem <= 0) break; const take = Math.min(l.remaining, rem); picks[l.id] = +take.toFixed(2); rem -= take; }
+    for (const l of lots) { if (rem <= 1e-9) break; const take = Math.min(l.remaining, rem); picks[l.id] = +take.toFixed(3); rem -= take; }
     return picks;
   }
 
@@ -183,7 +183,7 @@
       return e('div', { key: r.rm, style: { border: '1px solid var(--border)', borderRadius: 8, padding: 12, marginBottom: 12 } },
         e('div', { className: 'row', style: { justifyContent: 'space-between', marginBottom: 8 } },
           e('div', null, e('b', { style: { fontSize: 13 } }, D.rmName(state, r.rm, lang)), e('span', { className: 'mono faint', style: { fontSize: 10, marginLeft: 6 } }, r.rm)),
-          e('span', { className: 'mono', style: { fontSize: 11, fontWeight: 700, color: Math.abs(allocSum(r.rm) - r.need) < 0.001 ? 'var(--ok)' : 'var(--danger)' } }, fmt(+allocSum(r.rm).toFixed(2)) + ' / ' + fmt(r.need) + ' ' + r.unit)),
+          e('span', { className: 'mono', style: { fontSize: 11, fontWeight: 700, color: Math.abs(allocSum(r.rm) - r.need) < 0.0005 ? 'var(--ok)' : 'var(--danger)' } }, fmt(+allocSum(r.rm).toFixed(3)) + ' / ' + fmt(r.need) + ' ' + r.unit)),
         e('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
           lots.map((l, i) => {
             const days = Math.round((new Date(l.expiry) - new Date(state.today)) / 864e5);
@@ -216,7 +216,7 @@
 
     return e(Modal, { title: t('wh.issue.selectlot') + ' · ' + D.rmName(state, rm, lang), onClose, width: 540,
       footer: e(React.Fragment, null, e('button', { className: 'btn', onClick: onClose }, t('btn.cancel')),
-        e('button', { className: 'btn btn-pri', disabled: !valid, onClick: submit }, e(Icon, { name: 'check', size: 14 }), t('btn.issue') + (total > 0 ? ' · ' + fmt(+total.toFixed(2)) : ''))) },
+        e('button', { className: 'btn btn-pri', disabled: !valid, onClick: submit }, e(Icon, { name: 'check', size: 14 }), t('btn.issue') + (total > 0 ? ' · ' + fmt(+total.toFixed(3)) : ''))) },
       e('div', { style: { fontSize: 11.5, color: 'var(--text-muted)', marginBottom: 10 } }, (po ? t('f.po') + ' ' + po + ' · ' : '') + t('f.reason') + ': ' + reasons[reason]),
       e('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
         lots.map((l, i) => {
