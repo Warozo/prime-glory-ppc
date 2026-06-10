@@ -40,27 +40,33 @@
           const outputLog = [{ time, date: useDate, step: l.stations[stepIdx].step, stepIdx, station: stepName, qty: add }, ...(l.outputLog || [])];
           return { ...l, stations, outputLog };
         });
-        const before = prev.lotsWip.find(l => l.id === lotId);
         const after = lotsWip.find(l => l.id === lotId);
-        const lastIdx = after.stations.length - 1;
-        const producedBefore = before.stations[lastIdx].cumOut;
-        const producedNow = after.stations[lastIdx].cumOut;
+        const poId = after.po;
         let next = { ...prev, lotsWip };
 
-        // last station produced more → make that quantity available for FG receiving immediately
+        // One PO may be split across several lines (several lots): aggregate the
+        // last-station output of EVERY lot belonging to this PO.
+        const lastOut = (w) => (w.stations[w.stations.length - 1].cumOut || 0);
+        const sumForPo = (arr) => arr.filter(w => w.po === poId).reduce((a, w) => a + lastOut(w), 0);
+        const producedBefore = sumForPo(prev.lotsWip);
+        const producedNow = sumForPo(lotsWip);
+        // order/PO total qty (not the sub-lot qty)
+        const orderQty = (prev.prodOrders.find(p => p.id === poId) || {}).qty || after.qty;
+
+        // total finished output grew → make it available for FG receiving (qty = order total)
         if (producedNow > producedBefore) {
-          const existing = prev.fgPending.find(f => f.po === after.po);
+          const existing = prev.fgPending.find(f => f.po === poId);
           if (existing) {
-            next.fgPending = prev.fgPending.map(f => f.po === after.po ? { ...f, produced: producedNow } : f);
+            next.fgPending = prev.fgPending.map(f => f.po === poId ? { ...f, produced: producedNow, qty: orderQty } : f);
           } else {
-            next.fgPending = [{ id: D.genId('FR'), po: after.po, fg: after.fg, qty: after.qty, produced: producedNow, receipts: [], completed: prev.today, status: 'pending' }, ...prev.fgPending];
+            next.fgPending = [{ id: D.genId('FR'), po: poId, fg: after.fg, qty: orderQty, produced: producedNow, receipts: [], completed: prev.today, status: 'pending' }, ...prev.fgPending];
           }
         }
-        // whole lot finished → close PO + order (record completion date)
-        const justCompleted = producedBefore < after.qty && producedNow >= after.qty;
+        // whole ORDER finished (all lines summed) → close PO + order
+        const justCompleted = producedBefore < orderQty && producedNow >= orderQty;
         if (justCompleted) {
           setTimeout(() => toast(t('toast.completed')), 50);
-          next.prodOrders = prev.prodOrders.map(p => p.id === after.po ? { ...p, status: 'completed', completedAt: prev.today } : p);
+          next.prodOrders = prev.prodOrders.map(p => p.id === poId ? { ...p, status: 'completed', completedAt: prev.today } : p);
           next.orders = prev.orders.map(o => o.id === after.order ? { ...o, status: 'completed' } : o);
         }
         return next;

@@ -4,7 +4,7 @@
    ============================================================ */
 (function () {
   const { useI18n } = window.PG_I18N;
-  const { PageHead, Icon, fmt, fmtDate, useToast, PriorityBadge } = window.PG_UI;
+  const { PageHead, Icon, fmt, fmtDate, useToast, PriorityBadge, Modal, Field } = window.PG_UI;
   const D = window.PG_DATA;
 
   const DAYS = 12, DAY_W = 62, ROW_H = 58, LABEL_W = 178;
@@ -19,20 +19,27 @@
     const iso = (dayIdx) => { const dd = new Date(state.today); dd.setDate(dd.getDate() + dayIdx); return dd.toISOString().slice(0, 10); };
 
     // Bars are persisted in shared state (state.scheduleBars) so they survive navigation.
-    const [bars, setBarsRaw] = React.useState(() => (state.scheduleBars || []).map(b => ({ ...b })));
+    // Each bar is ONE allocation of a PO onto a line: { id (alloc id), po (parent PO), qty (sub-qty), line, startDay, days }.
+    // Legacy bars used id === po.id with no `.po`; normalise them so po always exists.
+    const [bars, setBarsRaw] = React.useState(() => (state.scheduleBars || []).map(b => ({ ...b, po: b.po || b.id })));
     const barsRef = React.useRef(bars);
     const setBars = (updater) => setBarsRaw(prev => { const next = typeof updater === 'function' ? updater(prev) : updater; barsRef.current = next; return next; });
     const [activeBar, setActiveBar] = React.useState(null);
+    const [allocReq, setAllocReq] = React.useState(null); // { po, lineId, startDay, max } — pending split allocation
 
-    // Two pools: ready (materials issued) — draggable; waiting (reserved, not yet issued) — not draggable
-    const poolReady = state.prodOrders.filter(p => p.status === 'issued' && !p.line);
-    const poolWaiting = state.prodOrders.filter(p => p.status === 'reserved' && !p.line);
+    // How much of a PO is already placed on the board, and how much is left to allocate
+    const allocatedOf = (poId) => bars.filter(b => b.po === poId).reduce((a, b) => a + b.qty, 0);
+    const remainingOf = (po) => +(po.qty - allocatedOf(po.id)).toFixed(0);
+
+    // Two pools: ready (materials issued, still has qty to place) — draggable; waiting (reserved) — not draggable.
+    // A split order keeps showing in the ready pool (with its remaining qty) until fully allocated.
+    const poolReady = state.prodOrders.filter(p => (p.status === 'issued' || p.status === 'scheduled' || p.status === 'inprogress') && remainingOf(p) > 0);
+    const poolWaiting = state.prodOrders.filter(p => p.status === 'reserved');
 
     function persist() {
       setState(prev => ({ ...prev, scheduleBars: barsRef.current,
-        prodOrders: prev.prodOrders.map(p => { const b = barsRef.current.find(x => x.id === p.id); return b ? { ...p, line: b.line, start: iso(b.startDay), days: b.days } : p; }),
-        // keep the shop-floor WIP lot on the same line as its Gantt bar (until production starts, line can change)
-        lotsWip: prev.lotsWip.map(w => { const b = barsRef.current.find(x => x.id === w.po); return b && b.line !== w.line ? { ...w, line: b.line } : w; }) }));
+        // keep each started lot's line in sync with its allocation bar (line is locked post-start, so usually a no-op)
+        lotsWip: prev.lotsWip.map(w => { const b = barsRef.current.find(x => x.id === (w.alloc || w.po)); return b && b.line !== w.line ? { ...w, line: b.line } : w; }) }));
     }
 
     const dayDate = (i) => { const d = new Date(state.today); d.setDate(d.getDate() + i); return d; };
@@ -45,15 +52,11 @@
       window.addEventListener('pointermove', onMove);
       window.addEventListener('pointerup', onUp);
     }
-    // a lot is "started" once production has begun (PPC pressed Start) → line is locked
-    function lotStarted(poId) {
-      const p = state.prodOrders.find(x => x.id === poId);
-      return !!(p && (p.status === 'inprogress' || p.status === 'completed'));
-    }
-    function lotCompleted(poId) {
-      const p = state.prodOrders.find(x => x.id === poId);
-      return !!(p && p.status === 'completed');
-    }
+    // a bar (allocation) is "started" once its own WIP lot exists → line is locked;
+    // "completed" once that lot's final-station output reaches its sub-qty
+    const lotOfBar = (bar) => state.lotsWip.find(w => (w.alloc || w.po) === bar.id);
+    function barStarted(bar) { return !!lotOfBar(bar); }
+    function barCompleted(bar) { const l = lotOfBar(bar); return !!l && l.stations[l.stations.length - 1].cumOut >= l.qty; }
 
     function onMove(e) {
       const d = drag.current; if (!d) return;
@@ -65,8 +68,8 @@
           return { ...b, days };
         } else {
           const startDay = Math.max(0, Math.min(DAYS - b.days, d.oStart + dDays));
-          // once production has started on this lot, keep it on its line (no cross-line move)
-          if (lotStarted(b.id)) return { ...b, startDay };
+          // once production has started on this allocation, keep it on its line (no cross-line move)
+          if (barStarted(b)) return { ...b, startDay };
           const dRow = Math.round((e.clientY - d.startY) / ROW_H);
           const idx = Math.max(0, Math.min(state.lines.length - 1, state.lines.findIndex(l => l.id === d.oLine) + dRow));
           return { ...b, startDay, line: state.lines[idx].id };
@@ -85,33 +88,46 @@
     function onDrop(e, lineId) {
       e.preventDefault(); setDropLine(null);
       const poId = e.dataTransfer.getData('text/plain'); if (!poId) return;
-      const po = state.prodOrders.find(p => p.id === poId); if (!po || po.status !== 'issued') return;
+      const po = state.prodOrders.find(p => p.id === poId); if (!po) return;
+      if (!(po.status === 'issued' || po.status === 'scheduled' || po.status === 'inprogress')) return;
+      const rem = remainingOf(po); if (rem <= 0) return;
       const rect = gridRef.current.getBoundingClientRect();
       const x = e.clientX - rect.left - LABEL_W;
       const startDay = Math.max(0, Math.min(DAYS - 2, Math.floor(x / DAY_W)));
-      const days = Math.max(1, Math.min(4, Math.round(po.qty / (state.lines.find(l => l.id === lineId).dailyCap))));
+      // ask how much of the (remaining) qty goes on this line — the rest can be dropped elsewhere
+      setAllocReq({ po, lineId, startDay, max: rem });
+    }
+
+    // Commit one allocation (sub-qty) of a PO onto a line as a new Gantt bar.
+    function placeAllocation(po, lineId, startDay, qty) {
+      const q = Math.max(1, Math.min(Math.round(qty), remainingOf(po)));
+      const n = barsRef.current.filter(b => b.po === po.id).length + 1;
+      const allocId = po.id + '-' + n;
+      const cap = (state.lines.find(l => l.id === lineId) || {}).dailyCap || q;
+      const days = Math.max(1, Math.min(4, Math.round(q / cap) || 1));
       const order = state.orders.find(o => o.id === po.order) || {};
-      const bar = { id: po.id, order: po.order, fg: po.fg, qty: po.qty, line: lineId, startDay, days, priority: order.priority || 'med' };
+      const bar = { id: allocId, po: po.id, order: po.order, fg: po.fg, qty: q, line: lineId, startDay, days, priority: order.priority || 'med' };
       const nextBars = [...barsRef.current, bar];
       setBars(nextBars);
-      // Only PLACE the order on a line (status 'scheduled'). No WIP lot yet — that happens on Start.
+      // Only PLACE the allocation (order → 'scheduled'). No WIP lot yet — that happens on Start.
       setState(prev => ({ ...prev,
         scheduleBars: nextBars,
-        prodOrders: prev.prodOrders.map(p => p.id === poId ? { ...p, line: lineId, start: iso(startDay), days, status: 'scheduled' } : p),
-        orders: prev.orders.map(o => o.id === po.order ? { ...o, status: 'scheduled' } : o),
+        prodOrders: prev.prodOrders.map(p => p.id === po.id && p.status === 'issued' ? { ...p, status: 'scheduled' } : p),
+        orders: prev.orders.map(o => o.id === po.order && o.status !== 'completed' ? { ...o, status: 'scheduled' } : o),
       }));
+      setAllocReq(null);
       toast(t('toast.scheduled'));
     }
 
-    // Start production: freeze the CURRENT line's workflow template, create the WIP lot, lock the line.
+    // Start production for ONE allocation: snapshot the line's workflow into a WIP lot, lock the line.
     function startProduction(bar) {
       setState(prev => {
+        if (prev.lotsWip.some(w => (w.alloc || w.po) === bar.id)) return prev;
         const wf = D.workflowForLine(prev, bar.line);
-        const wfSnapshot = wf ? wf.steps.map(s => ({ ...s })) : null;
-        const prodOrders = prev.prodOrders.map(p => p.id === bar.id ? { ...p, line: bar.line, status: 'inprogress', wf: (wf || {}).id || p.wf, wfSnapshot } : p);
-        const targetPo = prodOrders.find(p => p.id === bar.id);
-        const lotsWip = prev.lotsWip.some(w => w.po === bar.id) ? prev.lotsWip : [...prev.lotsWip, D.buildWipLot(prev, targetPo)];
-        return { ...prev, prodOrders, lotsWip };
+        const stations = (wf ? wf.steps : []).map(st => ({ step: st.key, name: st.name, nameTh: st.nameTh, wipIn: 0, wipOut: 0, cumOut: 0, wip: 0 }));
+        const lot = { id: 'LOT-' + bar.id, alloc: bar.id, po: bar.po, order: bar.order, fg: bar.fg, qty: bar.qty, line: bar.line, wf: (wf || {}).id, stations, outputLog: [] };
+        const prodOrders = prev.prodOrders.map(p => p.id === bar.po && p.status !== 'completed' ? { ...p, status: 'inprogress' } : p);
+        return { ...prev, prodOrders, lotsWip: [...prev.lotsWip, lot] };
       });
       toast(t('toast.started'));
     }
@@ -147,8 +163,9 @@
                     order.priority && React.createElement(PriorityBadge, { p: order.priority })),
                   React.createElement('div', { style: { fontSize: 12, fontWeight: 600 } }, D.fgName(state, po.fg, lang)),
                   React.createElement('div', { className: 'row', style: { justifyContent: 'space-between', marginTop: 5, fontSize: 10.5 } },
-                    React.createElement('span', { className: 'mono faint' }, fmt(po.qty) + ' ' + t('u.pcs')),
-                    React.createElement('span', { className: 'faint' }, order.due ? fmtDate(order.due) : po.order)));
+                    React.createElement('span', { className: 'mono faint' }, (remainingOf(po) < po.qty ? fmt(remainingOf(po)) + '/' + fmt(po.qty) : fmt(po.qty)) + ' ' + t('u.pcs')),
+                    React.createElement('span', { className: 'faint' }, order.due ? fmtDate(order.due) : po.order)),
+                  remainingOf(po) < po.qty && React.createElement('div', { style: { fontSize: 9.5, color: 'var(--warn)', marginTop: 3 } }, lang === 'th' ? 'แบ่งบางส่วนแล้ว — ลากวางจำนวนที่เหลือได้' : 'Partly allocated — drag to place the rest'));
               }),
               poolReady.length > 0 && React.createElement('div', { className: 'faint', style: { fontSize: 10.5, textAlign: 'center', marginTop: 2, display: 'flex', gap: 5, justifyContent: 'center', alignItems: 'center' } },
                 React.createElement(Icon, { name: 'drag', size: 12 }), t('sch.draghint')))),
@@ -208,10 +225,34 @@
                       return React.createElement('div', { key: i, style: { width: DAY_W, flexShrink: 0, borderLeft: '1px solid var(--border)', background: i === todayIdx ? 'rgba(45,91,215,.04)' : (wd === 0 || wd === 6) ? 'var(--surface-2)' : 'transparent' } });
                     }),
                     // bars
-                    lineBars.map(b => React.createElement(Bar, { key: b.id, bar: b, state, lang, t, active: activeBar === b.id, started: lotStarted(b.id), completed: lotCompleted(b.id),
+                    lineBars.map(b => React.createElement(Bar, { key: b.id, bar: b, state, lang, t, active: activeBar === b.id, started: barStarted(b), completed: barCompleted(b),
                       onStart: startProduction, onPointerDown: onBarPointerDown }))));
               }))),
-          legend)));
+          legend)),
+      allocReq && React.createElement(AllocModal, { req: allocReq, state, t, lang,
+        onClose: () => setAllocReq(null),
+        onSubmit: (q) => placeAllocation(allocReq.po, allocReq.lineId, allocReq.startDay, q) }));
+  }
+
+  // Modal: how much of a PO's remaining qty to place on the dropped line
+  function AllocModal({ req, state, t, lang, onClose, onSubmit }) {
+    const po = req.po, max = req.max;
+    const line = state.lines.find(l => l.id === req.lineId) || {};
+    const [qty, setQty] = React.useState(String(max));
+    const q = Math.max(0, Math.min(Math.round(+qty || 0), max));
+    return React.createElement(Modal, { title: (lang === 'th' ? 'แบ่งจำนวนลงสาย · ' : 'Allocate to · ') + (line.name || req.lineId), onClose, width: 440,
+      footer: React.createElement(React.Fragment, null,
+        React.createElement('button', { className: 'btn', onClick: onClose }, t('btn.cancel')),
+        React.createElement('button', { className: 'btn btn-pri', disabled: q <= 0, onClick: () => onSubmit(q) }, React.createElement(Icon, { name: 'check', size: 14 }), lang === 'th' ? 'วางลงสาย' : 'Place')) },
+      React.createElement('div', { style: { background: 'var(--surface-2)', borderRadius: 8, padding: '10px 12px', marginBottom: 14, fontSize: 12 } },
+        React.createElement('div', { className: 'row', style: { justifyContent: 'space-between' } }, React.createElement('span', { className: 'faint' }, t('f.po')), React.createElement('b', { className: 'mono' }, po.id)),
+        React.createElement('div', { className: 'row', style: { justifyContent: 'space-between', marginTop: 4 } }, React.createElement('span', { className: 'faint' }, t('f.product')), React.createElement('b', null, D.fgName(state, po.fg, lang))),
+        React.createElement('div', { className: 'row', style: { justifyContent: 'space-between', marginTop: 4 } }, React.createElement('span', { className: 'faint' }, lang === 'th' ? 'คงเหลือให้แบ่ง' : 'Remaining to place'), React.createElement('b', { className: 'mono', style: { color: 'var(--primary)' } }, fmt(max) + ' ' + t('u.pcs')))),
+      React.createElement(Field, { label: lang === 'th' ? 'จำนวนสำหรับสายนี้' : 'Quantity for this line', required: true, hint: (lang === 'th' ? 'สูงสุด ' : 'Max ') + fmt(max) + (lang === 'th' ? ' — ที่เหลือลากไปไลน์อื่นได้' : ' — the rest can go to another line') },
+        React.createElement('input', { className: 'input mono', type: 'number', min: 1, max: max, value: qty, autoFocus: true, onChange: (e) => setQty(e.target.value) })),
+      React.createElement('div', { className: 'row', style: { gap: 6, marginTop: 8 } },
+        React.createElement('button', { className: 'btn btn-sm', onClick: () => setQty(String(Math.round(max / 2))) }, '50%'),
+        React.createElement('button', { className: 'btn btn-sm', onClick: () => setQty(String(max)) }, lang === 'th' ? 'ทั้งหมด' : 'All')));
   }
 
   function Bar({ bar, state, lang, t, active, started, completed, onStart, onPointerDown }) {

@@ -243,11 +243,12 @@
   //   started   = production has actually begun (prod order is in progress)
   function orderProgress(s, o) {
     const po = s.prodOrders.find(p => p.order === o.id);
-    const lot = s.lotsWip.find(l => l.order === o.id);
-    const produced = lot ? (lot.stations[lot.stations.length - 1].cumOut || 0) : 0;
+    // an order may be split across several lines → sum the last-station output of every WIP lot
+    const lots = s.lotsWip.filter(l => l.order === o.id);
+    const produced = lots.reduce((a, l) => a + (l.stations[l.stations.length - 1].cumOut || 0), 0);
     const fgp = po ? s.fgPending.find(f => f.po === po.id) : null;
     const received = fgp ? (fgp.receipts || []).reduce((a, r) => a + r.qty, 0) : 0;
-    const started = !!po && po.status === 'inprogress';
+    const started = lots.length > 0 || (!!po && po.status === 'inprogress');
     return { produced, received, started };
   }
 
