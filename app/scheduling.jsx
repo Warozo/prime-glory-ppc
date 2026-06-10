@@ -137,7 +137,7 @@
       setState(prev => {
         if (prev.lotsWip.some(w => (w.alloc || w.po) === bar.id)) return prev;
         const wf = D.workflowForLine(prev, bar.line);
-        const stations = (wf ? wf.steps : []).map(st => ({ step: st.key, name: st.name, nameTh: st.nameTh, wipIn: 0, wipOut: 0, cumOut: 0, wip: 0 }));
+        const stations = (wf ? wf.steps : []).map(st => ({ step: st.key, name: st.name, nameTh: st.nameTh, type: st.type, wipIn: 0, wipOut: 0, cumOut: 0, wip: 0, cumDefect: 0, reworkDone: 0 }));
         const lot = { id: 'LOT-' + bar.id, alloc: bar.id, po: bar.po, order: bar.order, fg: bar.fg, qty: bar.qty, line: bar.line, wf: (wf || {}).id, stations, outputLog: [] };
         const prodOrders = prev.prodOrders.map(p => p.id === bar.po && p.status !== 'completed' ? { ...p, status: 'inprogress' } : p);
         return { ...prev, prodOrders, lotsWip: [...prev.lotsWip, lot] };

@@ -20,7 +20,7 @@
     { key: 'box',     name: 'Boxing',            nameTh: 'ใส่กล่อง',         dur: 1, ic: 'box2' },
     { key: 'shrink',  name: 'Shrink Wrapping',   nameTh: 'หุ้มฟิล์ม',         dur: 1, ic: 'wrap' },
     { key: 'carton',  name: 'Carton Packing',    nameTh: 'แพ็คลัง',          dur: 1, ic: 'carton' },
-    { key: 'qc',      name: 'In-line QC',        nameTh: 'ตรวจสอบคุณภาพ',    dur: 1, ic: 'qc' },
+    { key: 'qc',      name: 'In-line QC',        nameTh: 'ตรวจสอบคุณภาพ',    dur: 1, ic: 'qc', type: 'qa' },
     { key: 'label',   name: 'Labeling',          nameTh: 'ติดฉลาก',          dur: 1, ic: 'label' },
   ];
 
@@ -233,7 +233,7 @@
   function buildWipLot(s, po) {
     const snap = po.wfSnapshot;
     const flow = snap ? { id: po.wf, steps: snap } : (s.workflows.find(w => w.id === po.wf) || workflowForLine(s, po.line));
-    const stations = flow.steps.map(st => ({ step: st.key, name: st.name, nameTh: st.nameTh, wipIn: 0, wipOut: 0, cumOut: 0, wip: 0 }));
+    const stations = flow.steps.map(st => ({ step: st.key, name: st.name, nameTh: st.nameTh, type: st.type, wipIn: 0, wipOut: 0, cumOut: 0, wip: 0, cumDefect: 0, reworkDone: 0 }));
     return { id: 'LOT-' + po.id.replace('PO-', ''), po: po.id, order: po.order, fg: po.fg, qty: po.qty, line: po.line, wf: flow.id, stations, outputLog: [] };
   }
 

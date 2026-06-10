@@ -19,7 +19,7 @@
     const [stepModal, setStepModal] = React.useState(false);
 
     function saveTemplate() {
-      const cleanSteps = steps.map((s, i) => ({ key: s.key, name: s.name, nameTh: s.nameTh, dur: s.dur || 1, ic: s.ic, id: 'st' + i + '_' + s.key }));
+      const cleanSteps = steps.map((s, i) => ({ key: s.key, name: s.name, nameTh: s.nameTh, dur: s.dur || 1, ic: s.ic, type: s.type, id: 'st' + i + '_' + s.key }));
       setState(prev => {
         const exists = prev.workflows.some(w => w.id === tplId);
         let workflows;
@@ -82,7 +82,7 @@
       const k = (form.key || '').trim();
       if (!k) { toast(lang === 'th' ? 'ต้องระบุรหัสขั้นตอน' : 'Step key required', 'warn'); return; }
       if (state.stepLib.some(s => s.key === k)) { toast(lang === 'th' ? 'รหัสขั้นตอนซ้ำ' : 'Step key already exists', 'warn'); return; }
-      setState(prev => ({ ...prev, stepLib: [...prev.stepLib, { key: k, name: form.name || form.nameTh, nameTh: form.nameTh || form.name, dur: +form.dur || 1, ic: form.ic }] }));
+      setState(prev => ({ ...prev, stepLib: [...prev.stepLib, { key: k, name: form.name || form.nameTh, nameTh: form.nameTh || form.name, dur: +form.dur || 1, ic: form.ic, type: form.type === 'qa' ? 'qa' : undefined }] }));
       toast(t('toast.saved')); setStepModal(false);
     }
 
@@ -114,7 +114,7 @@
             e('span', { style: { width: 24, height: 24, borderRadius: 6, background: 'var(--primary-tint)', color: 'var(--primary)', display: 'grid', placeItems: 'center', flexShrink: 0 } }, e(Icon, { name: STEP_ICONS[s.ic] || 'box', size: 13 })),
             e('div', { style: { minWidth: 0, flex: 1 } },
               e('div', { style: { fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, lang === 'th' ? s.nameTh : s.name),
-              e('div', { className: 'faint mono', style: { fontSize: 9 } }, s.key)),
+              e('div', { className: 'mono', style: { fontSize: 9, color: s.type === 'qa' ? 'var(--danger)' : 'var(--text-faint)' } }, s.type === 'qa' ? 'QA · ' + s.key : s.key)),
             canDelete && e('button', { className: 'btn btn-sm btn-ghost btn-icon', draggable: false, title: t('btn.delete'),
               onMouseDown: (ev) => ev.stopPropagation(),
               onClick: (ev) => { ev.stopPropagation(); delStep(s.key); },
@@ -156,13 +156,18 @@
   function StepLibModal({ t, lang, onClose, onSubmit }) {
     const Field = window.PG_UI.Field, Modal = window.PG_UI.Modal;
     const IC_OPTIONS = ['box', 'blend', 'fill', 'seal', 'box2', 'wrap', 'carton', 'qc', 'label'];
-    const [f, setF] = React.useState({ key: '', nameTh: '', name: '', dur: 1, ic: 'box' });
+    const [f, setF] = React.useState({ key: '', nameTh: '', name: '', dur: 1, ic: 'box', type: 'normal' });
     const set = (k, v) => setF(p => ({ ...p, [k]: v }));
     return e(Modal, { title: (lang === 'th' ? 'เพิ่มขั้นตอนใหม่' : 'Add New Step'), onClose, width: 460,
       footer: e(React.Fragment, null, e('button', { className: 'btn', onClick: onClose }, t('btn.cancel')),
         e('button', { className: 'btn btn-pri', disabled: !f.key.trim() || (!f.nameTh && !f.name), onClick: () => onSubmit(f) }, t('btn.save'))) },
       e('div', { className: 'grid g-2', style: { gap: 12 } },
         e('div', { style: { gridColumn: 'span 2' } }, e(Field, { label: (lang === 'th' ? 'รหัสขั้นตอน (key)' : 'Step key'), required: true }, e('input', { className: 'input mono', value: f.key, onChange: ev => set('key', ev.target.value.replace(/\s+/g, '')), placeholder: 'mystep' }))),
+        e('div', { style: { gridColumn: 'span 2' } }, e(Field, { label: (lang === 'th' ? 'ประเภทขั้นตอน' : 'Step type') },
+          e('div', { className: 'row', style: { gap: 8 } },
+            [['normal', lang === 'th' ? 'ปกติ' : 'Normal'], ['qa', lang === 'th' ? 'ตรวจคุณภาพ (QA)' : 'Quality check (QA)']].map(opt => e('button', { key: opt[0], type: 'button', onClick: () => set('type', opt[0]),
+              style: { flex: 1, padding: '8px 10px', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 600, border: '1px solid ' + (f.type === opt[0] ? (opt[0] === 'qa' ? 'var(--danger)' : 'var(--primary)') : 'var(--border)'), background: f.type === opt[0] ? (opt[0] === 'qa' ? 'var(--danger-tint)' : 'var(--primary-tint)') : 'var(--surface-2)', color: f.type === opt[0] ? (opt[0] === 'qa' ? 'var(--danger)' : 'var(--primary)') : 'var(--text-muted)' } }, opt[1]))),
+          f.type === 'qa' && e('div', { className: 'faint', style: { fontSize: 10.5, marginTop: 6 } }, lang === 'th' ? 'สถานี QA จะให้กรอกของดี + ของเสีย (Defect) ตอนรายงานผล' : 'A QA station collects good + defect quantities when reporting output'))),
         e('div', { style: { gridColumn: 'span 2' } }, e(Field, { label: (lang === 'th' ? 'ชื่อ (ไทย)' : 'Name (Thai)'), required: true }, e('input', { className: 'input', value: f.nameTh, onChange: ev => set('nameTh', ev.target.value) }))),
         e('div', { style: { gridColumn: 'span 2' } }, e(Field, { label: (lang === 'th' ? 'ชื่อ (อังกฤษ)' : 'Name (English)') }, e('input', { className: 'input', value: f.name, onChange: ev => set('name', ev.target.value) }))),
         e('div', { style: { gridColumn: 'span 2' } }, e(Field, { label: (lang === 'th' ? 'ไอคอน' : 'Icon') },
@@ -181,6 +186,7 @@
       e('div', { style: { flex: 1, minWidth: 0 } },
         e('div', { style: { fontSize: 12.5, fontWeight: 600 } }, lang === 'th' ? s.nameTh : s.name),
         e('div', { className: 'faint', style: { fontSize: 10.5 } }, lang === 'th' ? s.name : s.nameTh)),
+      s.type === 'qa' && e('span', { className: 'badge', style: { color: 'var(--danger)', background: 'var(--danger-tint)', fontSize: 9.5 } }, 'QA'),
       e('button', { className: 'btn btn-sm btn-ghost btn-icon', onClick: () => removeStep(s.uid), title: t('btn.delete') }, e(Icon, { name: 'trash', size: 14 })));
   }
 
