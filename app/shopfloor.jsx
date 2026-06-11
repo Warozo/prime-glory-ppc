@@ -163,8 +163,8 @@
                 React.createElement('div', null,
                   React.createElement('div', { style: { fontWeight: 700, color: 'var(--ok)', fontSize: 13 } }, t('toast.completed')),
                   React.createElement('div', { style: { fontSize: 11.5, color: 'var(--text-muted)' } }, lang === 'th' ? 'ทุกสถานีผลิตครบ ' + fmt(lot.qty) + ' ชิ้น — ส่งต่อรอ QC' : 'All stations reached ' + fmt(lot.qty) + ' — forwarded to pending acceptance'))),
-              // station chain
-              React.createElement('div', { style: { display: 'flex', gap: 0, overflowX: 'auto', paddingBottom: 6 } },
+              // station chain — wraps to new rows instead of scrolling sideways
+              React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(168px, 1fr))', gap: 10, paddingBottom: 6, alignItems: 'start' } },
                 lot.steps.map((st, i) => {
                   const isQA = st.type === 'qa';
                   const ci = cumIn(lot, i), out = lot.prog[i];
@@ -176,7 +176,7 @@
                   // a station is "locked" until the previous station passes output to it
                   const locked = !full && wip <= 0 && ci <= 0 && pending <= 0;
                   return React.createElement(React.Fragment, { key: i },
-                    React.createElement('div', { style: { flexShrink: 0, width: 168, border: '1px solid ' + (full ? 'color-mix(in srgb,var(--ok) 35%,white)' : wip > 0 ? 'var(--primary)' : 'var(--border)'), borderRadius: 9, overflow: 'hidden', background: full ? 'var(--ok-tint)' : locked ? 'var(--surface-2)' : 'var(--surface)', opacity: locked ? 0.7 : 1 } },
+                    React.createElement('div', { style: { border: '1px solid ' + (full ? 'color-mix(in srgb,var(--ok) 35%,white)' : wip > 0 ? 'var(--primary)' : 'var(--border)'), borderRadius: 9, overflow: 'hidden', background: full ? 'var(--ok-tint)' : locked ? 'var(--surface-2)' : 'var(--surface)', opacity: locked ? 0.7 : 1 } },
                       React.createElement('div', { style: { padding: '7px 10px', background: full ? 'color-mix(in srgb,var(--ok) 14%,white)' : wip > 0 ? 'var(--primary-tint)' : 'var(--surface-2)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 6 } },
                         React.createElement('span', { style: { width: 18, height: 18, borderRadius: '50%', background: full ? 'var(--ok)' : locked ? 'var(--text-faint)' : 'var(--primary)', color: '#fff', fontSize: 9.5, fontWeight: 700, display: 'grid', placeItems: 'center' } }, i + 1),
                         React.createElement('span', { style: { fontSize: 11, fontWeight: 700, lineHeight: 1.15 } }, lang === 'th' ? st.nameTh : st.name),
@@ -207,7 +207,7 @@
                                 React.createElement('span', { style: { color: x.rework ? 'var(--primary)' : 'var(--ok)' } }, (x.rework ? '↻' : '+') + fmt(x.qty)),
                                 x.defect > 0 && React.createElement('span', { style: { color: 'var(--danger)', marginLeft: 5 } }, '✕' + fmt(x.defect))))));
                         })())),
-                    i < lot.steps.length - 1 && React.createElement('div', { style: { flexShrink: 0, width: 22, display: 'grid', placeItems: 'center', color: 'var(--text-faint)' } }, React.createElement(Icon, { name: 'chevR', size: 16 })));
+                    null);
                 })))),
 
           // Output log — hourly matrix (steps × hour slots) for a selected day
@@ -359,20 +359,23 @@
           React.createElement(DateField, { value: day, onChange: setDay, style: { width: 150 } }),
           React.createElement('span', { className: 'badge badge-soft mono' }, fmt(dayTotal) + ' ' + t('u.units')))),
       React.createElement('div', { style: { overflowX: 'auto' } },
-        React.createElement('table', { className: 'tbl', style: { minWidth: 880 } },
+        React.createElement('table', { className: 'tbl', style: { minWidth: Math.max(560, 120 + lot.steps.length * 92) } },
+          // header: time column + one column per step
           React.createElement('thead', null, React.createElement('tr', null,
-            React.createElement('th', { style: { position: 'sticky', left: 0, zIndex: 2, background: 'var(--surface-2)', minWidth: 130 } }, t('sf.outputlog')),
-            cols.map(c => React.createElement('th', { key: c.k, className: 'num', style: { whiteSpace: 'nowrap', textAlign: c.k === 'lunch' ? 'center' : 'right', background: c.k === 'lunch' ? 'var(--surface-3)' : 'var(--surface-2)' } },
-              c.k === 'lunch' ? (lang === 'th' ? 'พักเที่ยง' : 'Lunch') : c.label)))),
+            React.createElement('th', { style: { position: 'sticky', left: 0, zIndex: 2, background: 'var(--surface-2)', minWidth: 118 } }, lang === 'th' ? 'ช่วงเวลา' : 'Time'),
+            lot.steps.map((st, si) => React.createElement('th', { key: si, className: 'num', style: { textAlign: 'right', verticalAlign: 'bottom', whiteSpace: 'normal', background: 'var(--surface-2)', minWidth: 84 } },
+              React.createElement('div', { className: 'row', style: { gap: 4, justifyContent: 'flex-end' } },
+                st.type === 'qa' && React.createElement('span', { style: { color: 'var(--danger)', fontSize: 8, fontWeight: 700 } }, 'QA'),
+                React.createElement('span', { style: { width: 15, height: 15, borderRadius: '50%', background: 'var(--surface-3)', color: 'var(--text-muted)', fontSize: 8.5, fontWeight: 700, display: 'grid', placeItems: 'center', flexShrink: 0 } }, si + 1)),
+              React.createElement('div', { style: { fontSize: 9.5, fontWeight: 600, lineHeight: 1.15, marginTop: 2 } }, lang === 'th' ? st.nameTh : st.name))))),
+          // body: one row per hour slot
           React.createElement('tbody', null,
-            lot.steps.map((st, si) => React.createElement('tr', { key: si },
-              React.createElement('td', { style: { position: 'sticky', left: 0, zIndex: 1, background: 'var(--surface)', fontWeight: 600, fontSize: 11.5 } },
-                React.createElement('span', { className: 'row', style: { gap: 6 } },
-                  React.createElement('span', { style: { width: 16, height: 16, borderRadius: '50%', background: 'var(--surface-3)', color: 'var(--text-muted)', fontSize: 9, fontWeight: 700, display: 'grid', placeItems: 'center' } }, si + 1),
-                  lang === 'th' ? st.nameTh : st.name)),
-              cols.map(c => {
+            cols.map(c => React.createElement('tr', { key: c.k, style: c.k === 'lunch' ? { background: 'var(--surface-3)' } : null },
+              React.createElement('td', { style: { position: 'sticky', left: 0, zIndex: 1, background: c.k === 'lunch' ? 'var(--surface-3)' : 'var(--surface)', fontWeight: 600, fontSize: 11, whiteSpace: 'nowrap' } },
+                c.k === 'lunch' ? (lang === 'th' ? 'พักเที่ยง' : 'Lunch') : c.label),
+              lot.steps.map((st, si) => {
                 const v = (matrix[si] || {})[c.k];
-                return React.createElement('td', { key: c.k, className: 'num mono', style: { background: c.k === 'lunch' ? 'var(--surface-3)' : 'transparent', color: v ? 'var(--ok)' : 'var(--text-faint)', fontWeight: v ? 700 : 400 } }, v ? fmt(v) : '');
+                return React.createElement('td', { key: si, className: 'num mono', style: { color: v ? 'var(--ok)' : 'var(--text-faint)', fontWeight: v ? 700 : 400 } }, v ? fmt(v) : '');
               }))))) ),
       dayTotal === 0 && React.createElement('div', { className: 'faint', style: { fontSize: 11.5, textAlign: 'center', padding: '12px 0' } }, lang === 'th' ? 'ยังไม่มีการบันทึกผลผลิตในวันที่เลือก' : 'No output reported on the selected day'));
   }
