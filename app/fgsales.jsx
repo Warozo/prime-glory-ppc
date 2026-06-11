@@ -113,13 +113,13 @@
       const lots = lotsFor(l.fg);
       const avail = sidQty(l.sid);
       const over = +l.qty > avail;
-      return e('div', { key: i, style: { display: 'grid', gridTemplateColumns: '1fr 130px 110px 32px', gap: 8, alignItems: 'start' } },
+      return e('div', { key: i, style: { display: 'grid', gridTemplateColumns: '0.9fr 1.8fr 92px 30px', gap: 8, alignItems: 'start' } },
         e('select', { className: 'select', value: l.fg, onChange: ev => setLine(i, 'fg', ev.target.value) },
           state.fg.map(x => e('option', { key: x.code, value: x.code }, (lang === 'th' ? x.nameTh : x.name) + ' (' + t('f.onhand') + ' ' + fmt(D.fgOnHand(state, x.code)) + ')'))),
         e('select', { className: 'select mono', value: l.sid, onChange: ev => setLine(i, 'sid', ev.target.value), disabled: lots.length === 0 },
           lots.length === 0
             ? [e('option', { key: 'none', value: '' }, lang === 'th' ? '— ไม่มีล็อต —' : '— no lots —')]
-            : lots.map(s => e('option', { key: s.sid, value: s.sid }, s.lot + ' · ' + fmt(s.qty)))),
+            : lots.map(s => e('option', { key: s.sid, value: s.sid }, s.lot + ' · ' + (lang === 'th' ? 'คงเหลือ ' : 'qty ') + fmt(s.qty) + (s.expiry ? ' · ' + (lang === 'th' ? 'หมดอายุ ' : 'exp ') + fmtDate(s.expiry) : '')))),
         e('div', null,
           e('input', { className: 'input mono', type: 'number', value: l.qty, placeholder: '0', max: avail, onChange: ev => setLine(i, 'qty', ev.target.value),
             style: over ? { borderColor: 'var(--danger)', boxShadow: '0 0 0 3px var(--danger-tint)' } : null }),
@@ -127,7 +127,7 @@
         e('button', { className: 'btn btn-sm btn-ghost btn-icon', disabled: f.lines.length === 1, onClick: () => delLine(i) }, e(Icon, { name: 'trash', size: 14 })));
     });
 
-    return e(Modal, { title: t('fgs.new'), onClose, width: 620,
+    return e(Modal, { title: t('fgs.new'), onClose, width: 680,
       footer: e(React.Fragment, null,
         e('button', { className: 'btn', onClick: onClose }, t('btn.cancel')),
         e('button', { className: 'btn btn-pri', disabled: !valid, onClick: () => onSubmit({ ...f, lines: f.lines.map(l => { const s = stockOf(l.sid) || {}; return { fg: l.fg, sid: l.sid, lot: s.lot, qty: +l.qty }; }) }) },
@@ -144,8 +144,8 @@
         e('div', { className: 'row', style: { marginBottom: 8 } },
           e('span', { style: { fontSize: 12, fontWeight: 700 } }, t('fgs.line')),
           e('button', { className: 'btn btn-sm', style: { marginLeft: 'auto' }, onClick: addLine }, e(Icon, { name: 'plus', size: 13 }), t('fgs.additem'))),
-        e('div', { style: { display: 'grid', gridTemplateColumns: '1fr 130px 110px 32px', gap: 8, marginBottom: 6, fontSize: 10, fontWeight: 600, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '.4px' } },
-          e('span', null, t('f.product')), e('span', null, t('f.lot')), e('span', null, t('f.qty')), e('span', null, '')),
+        e('div', { style: { display: 'grid', gridTemplateColumns: '0.9fr 1.8fr 92px 30px', gap: 8, marginBottom: 6, fontSize: 10, fontWeight: 600, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '.4px' } },
+          e('span', null, t('f.product')), e('span', null, t('f.lot') + ' · ' + (lang === 'th' ? 'คงเหลือ · หมดอายุ' : 'qty · exp')), e('span', null, t('f.qty')), e('span', null, '')),
         e('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } }, rows)));
   }
 
