@@ -176,6 +176,12 @@
     scan(state.fgPending); scan(state.issues); scan(state.prodOrders);
     _seq = mx;
   }
+  // Each FG-stock row needs a stable unique id (sid) so sales deduct the exact lot row,
+  // even when two rows share the same lot name. Backfill any legacy rows that lack one.
+  function ensureSids(state) {
+    if (!state || !Array.isArray(state.fgStock)) return;
+    state.fgStock.forEach(x => { if (x && !x.sid) x.sid = genId('FG'); });
+  }
 
   function buildState() {
     return JSON.parse(JSON.stringify({
@@ -291,7 +297,7 @@
         await _supa.from('app_state').upsert({ id: 'main', data: seed, client_id: CLIENT_ID, updated_at: new Date().toISOString() });
         return seed;
       }
-      const st = data.data; st.today = d(0); seedSeq(st); return st;
+      const st = data.data; st.today = d(0); seedSeq(st); ensureSids(st); return st;
     } catch (e) { console.warn('loadState error:', e); return buildState(); }
   }
 
@@ -316,7 +322,7 @@
       .on('postgres_changes', { event: '*', schema: 'public', table: 'app_state', filter: 'id=eq.main' }, function (payload) {
         const row = payload.new;
         if (!row || row.client_id === CLIENT_ID) return;
-        const st = row.data; st.today = d(0); seedSeq(st); onRemote(st);
+        const st = row.data; st.today = d(0); seedSeq(st); ensureSids(st); onRemote(st);
       })
       .subscribe();
     return function () { try { _supa.removeChannel(ch); } catch (e) {} };

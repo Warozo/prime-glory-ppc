@@ -30,7 +30,7 @@
         const totalRecv = already + qty;
         const status = totalRecv >= item.qty ? 'accepted' : 'pending';
         const fgPending = prev.fgPending.map(x => x.id === f.id ? { ...x, receipts, status } : x);
-        const fgStock = [{ fg: item.fg, qty, lot: form.lotNo, expiry: form.expiry || prev.today }, ...prev.fgStock];
+        const fgStock = [{ sid: D.genId('FG'), fg: item.fg, qty, lot: form.lotNo, expiry: form.expiry || prev.today }, ...prev.fgStock];
         return { ...prev, fgPending, fgStock };
       });
       toast(t('toast.received'));

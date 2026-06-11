@@ -23,7 +23,8 @@
         // deduct each line from its specific chosen lot
         let fgStock = prev.fgStock.map(x => ({ ...x }));
         form.lines.forEach(ln => {
-          const s = fgStock.find(x => x.fg === ln.fg && x.lot === ln.lot);
+          // deduct from the exact stock row chosen (sid), so duplicate lot names don't cross-deduct
+          const s = (ln.sid && fgStock.find(x => x.sid === ln.sid)) || fgStock.find(x => x.fg === ln.fg && x.lot === ln.lot);
           if (s) s.qty = Math.max(0, s.qty - ln.qty);
         });
         fgStock = fgStock.filter(x => x.qty > 0);
@@ -87,36 +88,38 @@
   function SalesModal({ state, t, lang, onClose, onSubmit }) {
     const e = React.createElement;
     const lotsFor = (fg) => state.fgStock.filter(x => x.fg === fg && x.qty > 0);
-    const lotQty = (fg, lot) => { const s = state.fgStock.find(x => x.fg === fg && x.lot === lot); return s ? s.qty : 0; };
+    const stockOf = (sid) => state.fgStock.find(x => x.sid === sid) || null;
+    const sidQty = (sid) => { const s = stockOf(sid); return s ? s.qty : 0; };
     // default to first FG that has stock
     const firstFg = (state.fg.find(x => lotsFor(x.code).length > 0) || state.fg[0]).code;
-    const firstLot = (lotsFor(firstFg)[0] || {}).lot || '';
-    const [f, setF] = React.useState({ id: '', customer: '', rep: '', date: state.today, lines: [{ fg: firstFg, lot: firstLot, qty: '' }] });
+    const firstSid = (lotsFor(firstFg)[0] || {}).sid || '';
+    const [f, setF] = React.useState({ id: '', customer: '', rep: '', date: state.today, lines: [{ fg: firstFg, sid: firstSid, qty: '' }] });
     const set = (k, v) => setF(p => ({ ...p, [k]: v }));
     const setLine = (i, k, v) => setF(p => ({ ...p, lines: p.lines.map((l, idx) => {
       if (idx !== i) return l;
       const nl = { ...l, [k]: v };
-      // when product changes, reset to its first available lot
-      if (k === 'fg') { nl.lot = (lotsFor(v)[0] || {}).lot || ''; }
+      // when product changes, reset to its first available lot row
+      if (k === 'fg') { nl.sid = (lotsFor(v)[0] || {}).sid || ''; }
       return nl;
     }) }));
-    const addLine = () => setF(p => ({ ...p, lines: [...p.lines, { fg: firstFg, lot: firstLot, qty: '' }] }));
+    const addLine = () => setF(p => ({ ...p, lines: [...p.lines, { fg: firstFg, sid: firstSid, qty: '' }] }));
     const delLine = (i) => setF(p => ({ ...p, lines: p.lines.filter((_, idx) => idx !== i) }));
 
-    const lineErr = (l) => { const q = +l.qty; if (!q || q <= 0) return true; if (!l.lot) return true; return q > lotQty(l.fg, l.lot); };
-    const valid = f.id.trim() && f.customer.trim() && f.lines.length > 0 && f.lines.every(l => !lineErr(l));
+    const lineErr = (l) => { const q = +l.qty; if (!q || q <= 0) return true; if (!l.sid) return true; return q > sidQty(l.sid); };
+    const dupDoc = f.id.trim() && (state.fgSales || []).some(s => (s.id || '').trim().toLowerCase() === f.id.trim().toLowerCase());
+    const valid = f.id.trim() && !dupDoc && f.customer.trim() && f.lines.length > 0 && f.lines.every(l => !lineErr(l));
 
     const rows = f.lines.map((l, i) => {
       const lots = lotsFor(l.fg);
-      const avail = lotQty(l.fg, l.lot);
+      const avail = sidQty(l.sid);
       const over = +l.qty > avail;
       return e('div', { key: i, style: { display: 'grid', gridTemplateColumns: '1fr 130px 110px 32px', gap: 8, alignItems: 'start' } },
         e('select', { className: 'select', value: l.fg, onChange: ev => setLine(i, 'fg', ev.target.value) },
           state.fg.map(x => e('option', { key: x.code, value: x.code }, (lang === 'th' ? x.nameTh : x.name) + ' (' + t('f.onhand') + ' ' + fmt(D.fgOnHand(state, x.code)) + ')'))),
-        e('select', { className: 'select mono', value: l.lot, onChange: ev => setLine(i, 'lot', ev.target.value), disabled: lots.length === 0 },
+        e('select', { className: 'select mono', value: l.sid, onChange: ev => setLine(i, 'sid', ev.target.value), disabled: lots.length === 0 },
           lots.length === 0
             ? [e('option', { key: 'none', value: '' }, lang === 'th' ? '— ไม่มีล็อต —' : '— no lots —')]
-            : lots.map(s => e('option', { key: s.lot, value: s.lot }, s.lot + ' · ' + fmt(s.qty)))),
+            : lots.map(s => e('option', { key: s.sid, value: s.sid }, s.lot + ' · ' + fmt(s.qty)))),
         e('div', null,
           e('input', { className: 'input mono', type: 'number', value: l.qty, placeholder: '0', max: avail, onChange: ev => setLine(i, 'qty', ev.target.value),
             style: over ? { borderColor: 'var(--danger)', boxShadow: '0 0 0 3px var(--danger-tint)' } : null }),
@@ -127,11 +130,11 @@
     return e(Modal, { title: t('fgs.new'), onClose, width: 620,
       footer: e(React.Fragment, null,
         e('button', { className: 'btn', onClick: onClose }, t('btn.cancel')),
-        e('button', { className: 'btn btn-pri', disabled: !valid, onClick: () => onSubmit({ ...f, lines: f.lines.map(l => ({ fg: l.fg, lot: l.lot, qty: +l.qty })) }) },
+        e('button', { className: 'btn btn-pri', disabled: !valid, onClick: () => onSubmit({ ...f, lines: f.lines.map(l => { const s = stockOf(l.sid) || {}; return { fg: l.fg, sid: l.sid, lot: s.lot, qty: +l.qty }; }) }) },
           e(Icon, { name: 'export', size: 14 }), t('fgs.confirm'))) },
       e('div', { className: 'grid g-2', style: { gap: 12, marginBottom: 16 } },
-        e('div', { style: { gridColumn: 'span 2' } }, e(Field, { label: t('fgs.docno'), required: true, hint: lang === 'th' ? 'เช่น INV-2026-001' : 'e.g. INV-2026-001' },
-          e('input', { className: 'input mono', value: f.id, onChange: ev => set('id', ev.target.value), placeholder: 'INV-____' }))),
+        e('div', { style: { gridColumn: 'span 2' } }, e(Field, { label: t('fgs.docno'), required: true, hint: dupDoc ? (lang === 'th' ? '⚠ เลขที่เอกสารนี้มีอยู่แล้ว' : '⚠ This document number already exists') : (lang === 'th' ? 'เช่น INV-2026-001' : 'e.g. INV-2026-001') },
+          e('input', { className: 'input mono', value: f.id, onChange: ev => set('id', ev.target.value), placeholder: 'INV-____', style: dupDoc ? { borderColor: 'var(--danger)' } : null }))),
         e(Field, { label: t('f.customer'), required: true }, e('select', { className: 'select', value: f.customer, onChange: ev => set('customer', ev.target.value) },
           [e('option', { key: '', value: '' }, lang === 'th' ? '— เลือกลูกค้า —' : '— select customer —')].concat((state.customers || []).map(c => e('option', { key: c, value: c }, c))))),
         e(Field, { label: t('f.date'), required: true }, e(DateField, { value: f.date, onChange: v => set('date', v) })),
