@@ -24,7 +24,7 @@
     // Transactional flow (orders → production → issues → reservations)
     const PROD_PATCH = { orders: [], prodOrders: [], scheduleBars: [], lotsWip: [], fgPending: [], issues: [], procurement: {}, reservedByRm: {} };
     const RM_PATCH = { lots: [], receipts: [], reservedByRm: {} };
-    const FG_PATCH = { fgStock: [] };
+    const FG_PATCH = { fgStock: [], fgSales: [] };
     const GOLIVE_PATCH = Object.assign({}, PROD_PATCH, RM_PATCH, FG_PATCH);
     async function doClear(req) {
       const label = await D.snapshotState(state, 'preclear');           // best-effort backup first
@@ -120,9 +120,9 @@
           clearRow(lang === 'th' ? 'ล้างสต๊อกวัตถุดิบ' : 'Clear raw-material stock',
             lang === 'th' ? 'ล็อตวัตถุดิบ และประวัติรับเข้า' : 'RM lots and receiving history',
             state.lots.length, RM_PATCH, false),
-          clearRow(lang === 'th' ? 'ล้างสต๊อกสินค้าสำเร็จรูป' : 'Clear finished-goods stock',
-            lang === 'th' ? 'สต๊อกสินค้าสำเร็จรูปทั้งหมด' : 'all finished-goods stock',
-            state.fgStock.length, FG_PATCH, false),
+          clearRow(lang === 'th' ? 'ล้างสต๊อก FG + รายงานการขาย' : 'Clear FG stock + sales report',
+            lang === 'th' ? 'สต๊อกสินค้าสำเร็จรูป และเอกสาร/รายงานการขายออกทั้งหมด' : 'all FG stock and sales documents/report',
+            state.fgStock.length + (state.fgSales || []).length, FG_PATCH, false),
           clearRow(lang === 'th' ? '🚀 รีเซ็ตเริ่มใช้จริง (ล้างทุกอย่าง ยกเว้นข้อมูลหลัก)' : '🚀 Go-live reset (clear all except master data)',
             lang === 'th' ? 'ล้างงานผลิต + สต๊อกทั้งหมด · เก็บสินค้า/BOM/สายผลิต/ผู้ใช้' : 'clear all transactions + stock · keep items/BOM/lines/users',
             state.orders.length + state.lots.length + state.fgStock.length, GOLIVE_PATCH, true))),
