@@ -167,6 +167,15 @@
 
   let _seq = 9100;
   function genId(prefix) { return prefix + '-' + (++_seq); }
+  // Bump the id counter past any existing genId-style ids in the loaded state, so newly
+  // generated ids (FR-/ISS-/PO-) never collide with persisted ones after a reload.
+  function seedSeq(state) {
+    if (!state) return;
+    let mx = _seq;
+    const scan = (arr) => (arr || []).forEach(x => { if (!x || typeof x.id !== 'string') return; const m = /^[A-Za-z]+-(\d+)$/.exec(x.id); if (m && +m[1] > mx) mx = +m[1]; });
+    scan(state.fgPending); scan(state.issues); scan(state.prodOrders);
+    _seq = mx;
+  }
 
   function buildState() {
     return JSON.parse(JSON.stringify({
@@ -282,7 +291,7 @@
         await _supa.from('app_state').upsert({ id: 'main', data: seed, client_id: CLIENT_ID, updated_at: new Date().toISOString() });
         return seed;
       }
-      const st = data.data; st.today = d(0); return st;
+      const st = data.data; st.today = d(0); seedSeq(st); return st;
     } catch (e) { console.warn('loadState error:', e); return buildState(); }
   }
 
@@ -307,7 +316,7 @@
       .on('postgres_changes', { event: '*', schema: 'public', table: 'app_state', filter: 'id=eq.main' }, function (payload) {
         const row = payload.new;
         if (!row || row.client_id === CLIENT_ID) return;
-        const st = row.data; st.today = d(0); onRemote(st);
+        const st = row.data; st.today = d(0); seedSeq(st); onRemote(st);
       })
       .subscribe();
     return function () { try { _supa.removeChannel(ch); } catch (e) {} };
