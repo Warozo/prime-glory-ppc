@@ -316,7 +316,9 @@
         React.createElement('button', { className: 'btn btn-pri', disabled: !f.qty || !f.id.trim() || !f.customer.trim(), onClick: () => onSubmit(f) }, t('btn.save'))) },
       React.createElement('div', { className: 'grid g-2', style: { gap: 12 } },
         React.createElement('div', { style: { gridColumn: 'span 2' } }, React.createElement(Field, { label: t('f.order'), required: true, hint: lang === 'th' ? 'กรอกเลขที่เอง เช่น SO-2496' : 'Enter your own number, e.g. SO-2496' }, React.createElement('input', { className: 'input mono', value: f.id, onChange: e => set('id', e.target.value), placeholder: 'SO-____' }))),
-        React.createElement(Field, { label: t('f.customer'), required: true }, React.createElement('input', { className: 'input', value: f.customer, onChange: e => set('customer', e.target.value), placeholder: lang === 'th' ? 'ชื่อลูกค้า' : 'Customer name' })),
+        React.createElement(Field, { label: t('f.customer'), required: true, hint: (state.customers || []).length === 0 ? (lang === 'th' ? 'เพิ่มลูกค้าได้ที่ ทะเบียนคู่ค้า/พนักงาน' : 'Add customers in the Partners registry') : null },
+          React.createElement('select', { className: 'select', value: f.customer, onChange: e => set('customer', e.target.value) },
+            [React.createElement('option', { key: '', value: '' }, lang === 'th' ? '— เลือกลูกค้า —' : '— select customer —')].concat((state.customers || []).map(c => React.createElement('option', { key: c, value: c }, c))))),
         React.createElement(Field, { label: t('f.product'), required: true }, React.createElement('select', { className: 'select', value: f.fg, onChange: e => set('fg', e.target.value) }, state.fg.map(x => React.createElement('option', { key: x.code, value: x.code }, lang === 'th' ? x.nameTh : x.name)))),
         React.createElement(Field, { label: t('f.qty'), required: true }, React.createElement('input', { className: 'input mono', type: 'number', value: f.qty, onChange: e => set('qty', e.target.value), placeholder: '0' })),
         React.createElement(Field, { label: t('f.duedate'), required: true }, React.createElement(DateField, { value: f.due, onChange: v => set('due', v) })),
@@ -418,8 +420,72 @@
         React.createElement('div', { style: { gridColumn: 'span 2' } }, React.createElement(Field, { label: t('f.email') }, React.createElement('input', { className: 'input', type: 'email', value: f.email, onChange: e => set('email', e.target.value) })))));
   }
 
+  /* ---------------- Partners / Staff registry ---------------- */
+  // Manages the lists used by the customer/supplier/sales-rep dropdowns.
+  function Partners({ state, setState, canDelete }) {
+    const { t, lang } = useI18n();
+    const toast = useToast();
+    const [modal, setModal] = React.useState(null); // { listKey, mode, index, value }
+
+    const LISTS = [
+      { key: 'customers', icon: 'orders', th: 'ลูกค้า', en: 'Customers', subTh: 'ใช้ใน คำสั่งซื้อลูกค้า + เอกสารขาย', subEn: 'Used in customer orders + sales documents' },
+      { key: 'suppliers', icon: 'receive', th: 'ผู้ขาย / ซัพพลายเออร์', en: 'Suppliers', subTh: 'ใช้ใน รับเข้าวัตถุดิบ', subEn: 'Used in material receiving' },
+      { key: 'salesReps', icon: 'users', th: 'พนักงานขาย', en: 'Sales reps', subTh: 'ใช้ใน สร้างเอกสารขาย (ผู้บันทึก)', subEn: 'Used in sales documents (recorded by)' },
+    ];
+    const listOf = (k) => state[k] || [];
+
+    function save(form) {
+      const name = (form.value || '').trim();
+      if (!name) return;
+      const key = form.listKey;
+      const cur = listOf(key);
+      const dupAt = cur.findIndex(x => x.toLowerCase() === name.toLowerCase());
+      if (dupAt >= 0 && dupAt !== form.index) { toast(lang === 'th' ? 'ชื่อนี้มีอยู่แล้ว' : 'Name already exists', 'warn'); return; }
+      setState(prev => {
+        const arr = (prev[key] || []).slice();
+        if (form.mode === 'edit') arr[form.index] = name; else arr.push(name);
+        return { ...prev, [key]: arr };
+      });
+      toast(t('toast.saved')); setModal(null);
+    }
+    function del(key, index) {
+      if (!window.confirm(lang === 'th' ? 'ลบรายการนี้?' : 'Delete this entry?')) return;
+      setState(prev => ({ ...prev, [key]: (prev[key] || []).filter((_, i) => i !== index) }));
+      toast(t('toast.deleted'), 'warn');
+    }
+
+    return React.createElement('div', null,
+      React.createElement(PageHead, { title: lang === 'th' ? 'ทะเบียนคู่ค้า / พนักงาน' : 'Partners & staff registry', sub: lang === 'th' ? 'จัดการรายชื่อลูกค้า ผู้ขาย และพนักงานขาย สำหรับใช้เป็นตัวเลือกในฟอร์ม' : 'Manage customers, suppliers and sales reps used as form dropdowns' }),
+      React.createElement('div', { className: 'grid g-3', style: { alignItems: 'start' } },
+        LISTS.map(L => React.createElement('div', { key: L.key, className: 'card' },
+          React.createElement('div', { className: 'card-h' },
+            React.createElement(Icon, { name: L.icon, size: 15, style: { color: 'var(--primary)' } }),
+            React.createElement('div', null, React.createElement('h3', null, lang === 'th' ? L.th : L.en), React.createElement('div', { className: 'sub' }, lang === 'th' ? L.subTh : L.subEn)),
+            React.createElement('button', { className: 'btn btn-sm btn-pri card-h-actions', onClick: () => setModal({ listKey: L.key, mode: 'add', index: -1, value: '' }) }, React.createElement(Icon, { name: 'plus', size: 13 }), t('btn.new'))),
+          React.createElement('div', { style: { padding: 8, display: 'flex', flexDirection: 'column', gap: 6 } },
+            listOf(L.key).length === 0
+              ? React.createElement('div', { className: 'empty', style: { fontSize: 11 } }, lang === 'th' ? 'ยังไม่มีรายชื่อ' : 'No entries yet')
+              : listOf(L.key).map((name, i) => React.createElement('div', { key: i, className: 'row', style: { justifyContent: 'space-between', gap: 8, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 7, padding: '8px 10px' } },
+                  React.createElement('span', { style: { fontSize: 12.5, fontWeight: 600, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, name),
+                  React.createElement('div', { className: 'row', style: { gap: 2, flexShrink: 0 } },
+                    React.createElement('button', { className: 'btn btn-sm btn-ghost btn-icon', title: t('btn.edit'), onClick: () => setModal({ listKey: L.key, mode: 'edit', index: i, value: name }) }, React.createElement(Icon, { name: 'edit', size: 13 })),
+                    canDelete && React.createElement('button', { className: 'btn btn-sm btn-ghost btn-icon', title: t('btn.delete'), onClick: () => del(L.key, i) }, React.createElement(Icon, { name: 'trash', size: 13, style: { color: 'var(--danger)' } }))))))))),
+      modal && React.createElement(PartnerModal, { modal, lang, t, onClose: () => setModal(null), onSubmit: save }));
+  }
+
+  function PartnerModal({ modal, lang, t, onClose, onSubmit }) {
+    const [value, setValue] = React.useState(modal.value || '');
+    return React.createElement(Modal, { title: (modal.mode === 'edit' ? (lang === 'th' ? 'แก้ไขรายชื่อ' : 'Edit entry') : (lang === 'th' ? 'เพิ่มรายชื่อ' : 'Add entry')), onClose, width: 420,
+      footer: React.createElement(React.Fragment, null,
+        React.createElement('button', { className: 'btn', onClick: onClose }, t('btn.cancel')),
+        React.createElement('button', { className: 'btn btn-pri', disabled: !value.trim(), onClick: () => onSubmit(Object.assign({}, modal, { value })) }, t('btn.save'))) },
+      React.createElement(Field, { label: lang === 'th' ? 'ชื่อ' : 'Name', required: true },
+        React.createElement('input', { className: 'input', value: value, autoFocus: true, onChange: e => setValue(e.target.value), onKeyDown: e => { if (e.key === 'Enter' && value.trim()) onSubmit(Object.assign({}, modal, { value })); } })));
+  }
+
   window.PG_ItemMaster = ItemMaster;
   window.PG_BOM = BOM;
   window.PG_CustomerOrders = CustomerOrders;
   window.PG_Users = Users;
+  window.PG_Partners = Partners;
 })();

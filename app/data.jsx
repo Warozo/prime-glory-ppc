@@ -69,6 +69,7 @@
 
   const CUSTOMERS = ['Siam Beauty Co.', 'Lumina Cosmetics', 'Bloom Retail Group', 'Aura Skincare', 'Glow Pharma'];
   const SUPPLIERS = ['ChemSupply Asia', 'AromaSource Ltd.', 'PackPro Industries', 'PureActives Co.'];
+  const SALESREPS = [];
 
   const LINES = [
     { id: 'A', name: 'Line A — Serum', manpower: 8, dailyCap: 12000 },
@@ -169,7 +170,7 @@
 
   function buildState() {
     return JSON.parse(JSON.stringify({
-      raw: RAW, fg: FG, boms: BOMS, customers: CUSTOMERS, suppliers: SUPPLIERS,
+      raw: RAW, fg: FG, boms: BOMS, customers: CUSTOMERS, suppliers: SUPPLIERS, salesReps: SALESREPS,
       lines: LINES, workflows: WORKFLOWS, orders: ORDERS, lots: LOTS, receipts: RECEIPTS,
       lotsWip: [], prodOrders: PRODORDERS, fgPending: FG_PENDING, fgStock: FG_STOCK, fgSales: [],
       reservedByRm: {}, scheduleBars: [], issues: [], procurement: {},

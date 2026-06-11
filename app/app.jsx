@@ -11,13 +11,13 @@
     { sec: 'navsec.planning', items: [ { k: 'orders', ic: 'orders' }, { k: 'flow', ic: 'flow', badge: 'waiting' }, { k: 'schedule', ic: 'schedule' } ] },
     { sec: 'navsec.production', items: [ { k: 'designer', ic: 'designer' }, { k: 'shopfloor', ic: 'shopfloor' }, { k: 'qa', ic: 'checkcircle' } ] },
     { sec: 'navsec.warehouse', items: [ { k: 'receiving', ic: 'receive' }, { k: 'issue', ic: 'issue' }, { k: 'fgreceiving', ic: 'fg' }, { k: 'fgsales', ic: 'export' }, { k: 'stock', ic: 'warehouse' } ] },
-    { sec: 'navsec.master', items: [ { k: 'items', ic: 'items' }, { k: 'bom', ic: 'bom' }, { k: 'settings', ic: 'factory' } ] },
+    { sec: 'navsec.master', items: [ { k: 'items', ic: 'items' }, { k: 'bom', ic: 'bom' }, { k: 'partners', ic: 'users' }, { k: 'settings', ic: 'factory' } ] },
     { sec: 'navsec.admin', items: [ { k: 'users', ic: 'users' } ] },
   ];
-  const NAV_LABEL = { dashboard: 'nav.dashboard', orders: 'nav.orders', flow: 'nav.flow', schedule: 'nav.schedule', designer: 'nav.designer', shopfloor: 'nav.shopfloor', qa: 'nav.qa', receiving: 'nav.receiving', issue: 'nav.issue', fgreceiving: 'nav.fgreceiving', fgsales: 'nav.fgsales', stock: 'nav.stock', items: 'nav.items', bom: 'nav.bom', settings: 'nav.settings', users: 'nav.users' };
+  const NAV_LABEL = { dashboard: 'nav.dashboard', orders: 'nav.orders', flow: 'nav.flow', schedule: 'nav.schedule', designer: 'nav.designer', shopfloor: 'nav.shopfloor', qa: 'nav.qa', receiving: 'nav.receiving', issue: 'nav.issue', fgreceiving: 'nav.fgreceiving', fgsales: 'nav.fgsales', stock: 'nav.stock', items: 'nav.items', bom: 'nav.bom', partners: 'nav.partners', settings: 'nav.settings', users: 'nav.users' };
 
   // Everything except User Management — shared by PPC and Management
-  const ALL_BUT_USERS = ['dashboard', 'orders', 'flow', 'schedule', 'designer', 'shopfloor', 'qa', 'receiving', 'issue', 'fgreceiving', 'fgsales', 'stock', 'items', 'bom', 'settings'];
+  const ALL_BUT_USERS = ['dashboard', 'orders', 'flow', 'schedule', 'designer', 'shopfloor', 'qa', 'receiving', 'issue', 'fgreceiving', 'fgsales', 'stock', 'items', 'bom', 'partners', 'settings'];
   const PERMS = {
     admin: 'all',                                                       // เห็นทั้งหมด
     ppc: ALL_BUT_USERS,                                                 // ทั้งหมด ยกเว้นจัดการผู้ใช้งาน
@@ -44,6 +44,7 @@
     stock: (p) => React.createElement(window.PG_Stock, p),
     items: (p) => React.createElement(window.PG_ItemMaster, p),
     bom: (p) => React.createElement(window.PG_BOM, p),
+    partners: (p) => React.createElement(window.PG_Partners, p),
     settings: (p) => React.createElement(window.PG_Settings, p),
     users: (p) => React.createElement(window.PG_Users, p),
   };
