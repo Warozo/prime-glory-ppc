@@ -228,20 +228,21 @@
 
   function ReworkModal({ req, t, lang, onClose, onSubmit }) {
     const Modal = window.PG_UI.Modal, Field = window.PG_UI.Field, fmt = window.PG_UI.fmt;
-    const [qty, setQty] = React.useState(String(req.pending));
+    const [qty, setQty] = React.useState(req.pending);
     const q = Math.max(0, Math.min(Math.round(+qty || 0), req.pending));
+    const submit = () => { if (q > 0) onSubmit(q); };
     return React.createElement(Modal, { title: lang === 'th' ? 'ส่งยอด Rework เสร็จ' : 'Send completed rework', onClose, width: 400,
       footer: React.createElement(React.Fragment, null,
         React.createElement('button', { className: 'btn', onClick: onClose }, t('btn.cancel')),
-        React.createElement('button', { className: 'btn btn-pri', disabled: q <= 0, onClick: () => onSubmit(q) }, React.createElement(Icon, { name: 'check', size: 14 }), t('btn.confirm'))) },
+        React.createElement('button', { className: 'btn btn-pri', disabled: q <= 0, onClick: submit }, React.createElement(Icon, { name: 'check', size: 14 }), t('btn.confirm'))) },
       React.createElement('div', { style: { background: 'var(--surface-2)', borderRadius: 8, padding: '10px 12px', marginBottom: 14, fontSize: 12 } },
         React.createElement('div', { className: 'row', style: { justifyContent: 'space-between' } }, React.createElement('span', { className: 'faint' }, t('f.station')), React.createElement('b', null, req.station)),
         React.createElement('div', { className: 'row', style: { justifyContent: 'space-between', marginTop: 4 } }, React.createElement('span', { className: 'faint' }, lang === 'th' ? 'ยอดรอ Rework' : 'Pending rework'), React.createElement('b', { className: 'mono', style: { color: 'var(--danger)' } }, fmt(req.pending)))),
       React.createElement(Field, { label: (lang === 'th' ? 'จำนวนที่ Rework เสร็จ' : 'Quantity reworked'), required: true, hint: lang === 'th' ? 'ส่งบางส่วนได้ ที่เหลือยังค้างรอ Rework' : 'You can send part of it; the rest stays pending' },
-        React.createElement('input', { className: 'input mono', type: 'number', min: 1, max: req.pending, value: qty, autoFocus: true, onChange: (e) => setQty(e.target.value) })),
+        React.createElement(Numpad, { value: qty, max: req.pending, lang: lang, onChange: setQty, onEnter: submit })),
       React.createElement('div', { className: 'row', style: { gap: 6, marginTop: 8 } },
-        React.createElement('button', { className: 'btn btn-sm', onClick: () => setQty(String(Math.round(req.pending / 2))) }, '50%'),
-        React.createElement('button', { className: 'btn btn-sm', onClick: () => setQty(String(req.pending)) }, lang === 'th' ? 'ทั้งหมด' : 'All')));
+        React.createElement('button', { className: 'btn btn-sm', onClick: () => setQty(Math.round(req.pending / 2)) }, '50%'),
+        React.createElement('button', { className: 'btn btn-sm', onClick: () => setQty(req.pending) }, lang === 'th' ? 'ทั้งหมด' : 'All')));
   }
 
   function StatRow({ label, v, color, big }) {
@@ -250,17 +251,38 @@
       React.createElement('span', { className: 'mono', style: { fontWeight: big ? 700 : 600, fontSize: big ? 15 : 11.5, color } }, window.PG_UI.fmt(v)));
   }
 
+  // On-screen number pad for shop-floor entry (digits, Clear, backspace, Enter)
+  function Numpad({ value, max, lang, accent, onChange, onEnter }) {
+    const set = (n) => onChange(Math.max(0, Math.min(max, Math.round(n) || 0)));
+    const press = (d) => { const cur = String(value || 0); set(+((cur === '0' ? '' : cur) + d)); };
+    const back = () => { const cur = String(value || 0); set(+(cur.length > 1 ? cur.slice(0, -1) : '0')); };
+    const key = (label, fn, extra) => React.createElement('button', { type: 'button', onClick: fn,
+      style: Object.assign({ height: 44, fontSize: 18, fontWeight: 700, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--surface)', color: 'var(--text)', cursor: 'pointer' }, extra || {}) }, label);
+    return React.createElement('div', null,
+      React.createElement('div', { style: { textAlign: 'right', fontFamily: 'IBM Plex Mono, monospace', fontSize: 27, fontWeight: 700, color: accent || 'var(--text)', padding: '5px 14px', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 8, marginBottom: 8 } }, fmt(value || 0) + ' / ' + fmt(max)),
+      React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 6 } },
+        ['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(d => key(d, () => press(d))),
+        key(lang === 'th' ? 'ล้าง' : 'Clear', () => set(0), { color: 'var(--danger)', fontSize: 14 }),
+        key('0', () => press('0')),
+        key('⌫', back, { fontSize: 20 }),
+        key(lang === 'th' ? 'ตกลง ✓' : 'Enter ✓', onEnter, { gridColumn: 'span 3', background: 'var(--primary)', color: '#fff', borderColor: 'var(--primary)', marginTop: 2 })));
+  }
+
   function ReportModal({ lot, stepIdx, maxQ, isQA, today, t, lang, onClose, onSubmit }) {
     const step = lot.steps[stepIdx];
     const [qty, setQty] = React.useState(Math.min(maxQ, 1000));
     const [defect, setDefect] = React.useState(0);
     const [date, setDate] = React.useState(today);
     const [time, setTime] = React.useState(() => { const n = new Date(); return String(n.getHours()).padStart(2, '0') + ':' + String(n.getMinutes()).padStart(2, '0'); });
+    const [active, setActive] = React.useState('good'); // which value the numpad edits (QA: good|defect)
     const DateField = window.PG_UI.DateField;
+    const total = qty + (isQA ? defect : 0);
+    const canSubmit = total > 0 && total <= maxQ;
+    const submit = () => { if (canSubmit) onSubmit(qty, time, date, isQA ? defect : 0); };
     return React.createElement(Modal, { title: t('sf.reportout'), onClose, width: 440,
       footer: React.createElement(React.Fragment, null,
         React.createElement('button', { className: 'btn', onClick: onClose }, t('btn.cancel')),
-        React.createElement('button', { className: 'btn btn-pri', disabled: (qty + (isQA ? defect : 0)) <= 0 || (qty + (isQA ? defect : 0)) > maxQ, onClick: () => onSubmit(qty, time, date, isQA ? defect : 0) }, React.createElement(Icon, { name: 'check', size: 14 }), t('btn.confirm'))) },
+        React.createElement('button', { className: 'btn btn-pri', disabled: !canSubmit, onClick: submit }, React.createElement(Icon, { name: 'check', size: 14 }), t('btn.confirm'))) },
       React.createElement('div', { style: { background: 'var(--surface-2)', borderRadius: 8, padding: '10px 12px', marginBottom: 14, fontSize: 12 } },
         React.createElement('div', { className: 'row', style: { justifyContent: 'space-between' } }, React.createElement('span', { className: 'faint' }, t('f.station')), React.createElement('b', null, lang === 'th' ? step.nameTh : step.name)),
         React.createElement('div', { className: 'row', style: { justifyContent: 'space-between', marginTop: 4 } }, React.createElement('span', { className: 'faint' }, t('sf.atstation')), React.createElement('b', { className: 'mono' }, window.PG_UI.fmt(maxQ)))),
@@ -274,12 +296,23 @@
             React.createElement('select', { className: 'select mono', value: (time || '00:00').split(':')[1], onChange: (e) => setTime((time || '00:00').split(':')[0] + ':' + e.target.value) },
               Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0')).map(m => React.createElement('option', { key: m, value: m }, m))),
             React.createElement('span', { className: 'faint', style: { fontSize: 11 } }, lang === 'th' ? 'น.' : 'hrs')))),
-      React.createElement(Field, { label: (isQA ? (lang === 'th' ? 'ผลผลิตดี' : 'Good output') : t('f.output')) + ' (' + t('u.units') + ')', required: true },
-        React.createElement('input', { className: 'input mono', type: 'number', min: 0, max: maxQ, value: qty, onChange: (e) => setQty(Math.max(0, Math.min(maxQ - (isQA ? defect : 0), +e.target.value))) })),
-      isQA && React.createElement(Field, { label: (lang === 'th' ? 'ของเสีย (Defect)' : 'Defect') + ' (' + t('u.units') + ')' },
-        React.createElement('input', { className: 'input mono', type: 'number', min: 0, max: maxQ, value: defect, style: { borderColor: defect > 0 ? 'var(--danger)' : undefined, color: defect > 0 ? 'var(--danger)' : undefined }, onChange: (e) => setDefect(Math.max(0, Math.min(maxQ - qty, +e.target.value))) })),
-      React.createElement('div', { className: 'row', style: { gap: 6, marginTop: 8 } },
-        [0.25, 0.5, 1].map(f => React.createElement('button', { key: f, className: 'btn btn-sm', onClick: () => setQty(Math.round((maxQ - (isQA ? defect : 0)) * f)) }, Math.round(f * 100) + '%'))));
+      isQA
+        ? React.createElement('div', null,
+            React.createElement('div', { className: 'row', style: { gap: 8, marginBottom: 8 } },
+              React.createElement('button', { type: 'button', onClick: () => setActive('good'), style: { flex: 1, padding: '7px 10px', borderRadius: 8, cursor: 'pointer', textAlign: 'left', border: '1px solid ' + (active === 'good' ? 'var(--ok)' : 'var(--border)'), background: active === 'good' ? 'var(--ok-tint)' : 'var(--surface-2)' } },
+                React.createElement('div', { style: { fontSize: 10.5, color: 'var(--text-muted)' } }, lang === 'th' ? 'ผลผลิตดี' : 'Good'),
+                React.createElement('div', { className: 'mono', style: { fontSize: 18, fontWeight: 700, color: 'var(--ok)' } }, fmt(qty))),
+              React.createElement('button', { type: 'button', onClick: () => setActive('defect'), style: { flex: 1, padding: '7px 10px', borderRadius: 8, cursor: 'pointer', textAlign: 'left', border: '1px solid ' + (active === 'defect' ? 'var(--danger)' : 'var(--border)'), background: active === 'defect' ? 'var(--danger-tint)' : 'var(--surface-2)' } },
+                React.createElement('div', { style: { fontSize: 10.5, color: 'var(--text-muted)' } }, lang === 'th' ? 'ของเสีย (Defect)' : 'Defect'),
+                React.createElement('div', { className: 'mono', style: { fontSize: 18, fontWeight: 700, color: 'var(--danger)' } }, fmt(defect)))),
+            active === 'good'
+              ? React.createElement(Numpad, { value: qty, max: maxQ - defect, lang: lang, accent: 'var(--ok)', onChange: setQty, onEnter: submit })
+              : React.createElement(Numpad, { value: defect, max: maxQ - qty, lang: lang, accent: 'var(--danger)', onChange: setDefect, onEnter: submit }))
+        : React.createElement('div', null,
+            React.createElement('div', { style: { fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 } }, t('f.output') + ' (' + t('u.units') + ')'),
+            React.createElement(Numpad, { value: qty, max: maxQ, lang: lang, onChange: setQty, onEnter: submit })),
+      React.createElement('div', { className: 'row', style: { gap: 6, marginTop: 10 } },
+        [0.25, 0.5, 1].map(f => React.createElement('button', { key: f, className: 'btn btn-sm', onClick: () => { const cap = isQA ? (active === 'defect' ? maxQ - qty : maxQ - defect) : maxQ; const v = Math.round(cap * f); if (isQA && active === 'defect') setDefect(v); else setQty(v); } }, Math.round(f * 100) + '%'))));
   }
 
   // ---- Hourly output matrix (steps × hour slots) for a selected day ----
