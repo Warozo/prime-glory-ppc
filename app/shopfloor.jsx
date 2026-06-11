@@ -228,7 +228,7 @@
 
   function ReworkModal({ req, t, lang, onClose, onSubmit }) {
     const Modal = window.PG_UI.Modal, Field = window.PG_UI.Field, fmt = window.PG_UI.fmt;
-    const [qty, setQty] = React.useState(req.pending);
+    const [qty, setQty] = React.useState(0);
     const q = Math.max(0, Math.min(Math.round(+qty || 0), req.pending));
     const submit = () => { if (q > 0) onSubmit(q); };
     return React.createElement(Modal, { title: lang === 'th' ? 'ส่งยอด Rework เสร็จ' : 'Send completed rework', onClose, width: 400,
@@ -270,7 +270,7 @@
 
   function ReportModal({ lot, stepIdx, maxQ, isQA, today, t, lang, onClose, onSubmit }) {
     const step = lot.steps[stepIdx];
-    const [qty, setQty] = React.useState(Math.min(maxQ, 1000));
+    const [qty, setQty] = React.useState(0);
     const [defect, setDefect] = React.useState(0);
     const [date, setDate] = React.useState(today);
     const [time, setTime] = React.useState(() => { const n = new Date(); return String(n.getHours()).padStart(2, '0') + ':' + String(n.getMinutes()).padStart(2, '0'); });
