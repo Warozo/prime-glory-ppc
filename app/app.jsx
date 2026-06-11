@@ -16,18 +16,31 @@
   ];
   const NAV_LABEL = { dashboard: 'nav.dashboard', orders: 'nav.orders', flow: 'nav.flow', schedule: 'nav.schedule', designer: 'nav.designer', shopfloor: 'nav.shopfloor', qa: 'nav.qa', receiving: 'nav.receiving', issue: 'nav.issue', fgreceiving: 'nav.fgreceiving', fgsales: 'nav.fgsales', stock: 'nav.stock', items: 'nav.items', bom: 'nav.bom', partners: 'nav.partners', settings: 'nav.settings', users: 'nav.users' };
 
-  // Everything except User Management — shared by PPC and Management
-  const ALL_BUT_USERS = ['dashboard', 'orders', 'flow', 'schedule', 'designer', 'shopfloor', 'qa', 'receiving', 'issue', 'fgreceiving', 'fgsales', 'stock', 'items', 'bom', 'partners', 'settings'];
-  const PERMS = {
-    admin: 'all',                                                       // เห็นทั้งหมด
-    ppc: ALL_BUT_USERS,                                                 // ทั้งหมด ยกเว้นจัดการผู้ใช้งาน
-    management: ALL_BUT_USERS,                                          // ทั้งหมด ยกเว้นจัดการผู้ใช้งาน
-    warehouse: ['receiving', 'issue', 'fgreceiving', 'fgsales', 'stock'], // เฉพาะคลังสินค้า
-    production: ['dashboard', 'schedule', 'designer', 'shopfloor', 'qa'], // เฉพาะการผลิต + คุณภาพ
+  // All 17 sidebar sections (in display order) = the per-user permission keys
+  const NAV_KEYS = NAV.reduce((a, s) => a.concat(s.items.map(i => i.k)), []);
+  // Legacy role → sections, used only to migrate users created before per-user permissions
+  const ALL_BUT_USERS = NAV_KEYS.filter(k => k !== 'users');
+  const LEGACY_PERMS = {
+    admin: NAV_KEYS,
+    ppc: ALL_BUT_USERS, management: ALL_BUT_USERS,
+    warehouse: ['receiving', 'issue', 'fgreceiving', 'fgsales', 'stock'],
+    production: ['dashboard', 'schedule', 'designer', 'shopfloor', 'qa'],
   };
-  function allowed(role, key) { const p = PERMS[role]; return p === 'all' || p.includes(key); }
-  // First page a role is allowed to see — used as its landing/default route
-  function firstAllowed(role) { const p = PERMS[role]; return p === 'all' ? 'dashboard' : (p[0] || 'dashboard'); }
+  // Effective sidebar permissions: admin sees all; staff use their own perms list;
+  // users from the old role system fall back to that role's sections.
+  function userPerms(u) {
+    if (!u) return [];
+    if (u.role === 'admin') return NAV_KEYS.slice();
+    if (Array.isArray(u.perms)) return u.perms;
+    const lp = LEGACY_PERMS[u.role]; return lp ? lp.slice() : ['dashboard'];
+  }
+  function allowed(perms, key) { return Array.isArray(perms) && perms.indexOf(key) >= 0; }
+  // First page the user may see — used as the landing/default route
+  function firstAllowed(perms) {
+    for (var i = 0; i < NAV.length; i++) for (var j = 0; j < NAV[i].items.length; j++) { var k = NAV[i].items[j].k; if (allowed(perms, k)) return k; }
+    return 'dashboard';
+  }
+  window.PG_NAV = NAV; // expose nav structure for the user-permission checkboxes
 
   const ROUTES = {
     dashboard: (p) => React.createElement(window.PG_Dashboard, p),
@@ -68,7 +81,7 @@
       const found = users.find(x => x.username === u.trim() && x.password === p);
       if (!found) { setErr(lang === 'th' ? 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' : 'Invalid username or password'); return; }
       if (found.status !== 'A') { setErr(lang === 'th' ? 'บัญชีถูกปิดใช้งาน' : 'Account is inactive'); return; }
-      onLogin(found.role);
+      onLogin(found);
     };
     return React.createElement('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', height: '100%' } },
       React.createElement('div', { style: { background: 'linear-gradient(155deg,rgba(27,46,77,.78),rgba(15,28,49,.86)), url(app/login-bg.png) center/cover no-repeat', backgroundColor: '#0f1c31', color: '#fff', padding: '56px 60px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative', overflow: 'hidden' } },
@@ -103,22 +116,25 @@
       React.createElement('button', { className: lang === 'en' ? 'on' : '', onClick: () => setLang('en') }, 'EN'));
   }
 
-  /* ---------------- Role switcher ---------------- */
-  function RoleSwitch({ role, setRole, lang }) {
-    const t = (k) => tr(lang, k);
-    const initials = { admin: 'SA', ppc: 'SP', warehouse: 'NW', production: 'AS', management: 'PK' };
+  /* ---------------- Signed-in user chip ---------------- */
+  function RoleSwitch({ me, isAdmin, lang }) {
+    const name = (me && me.name) || (me && me.username) || 'User';
+    const initials = name.split(' ').map(x => x[0]).join('').slice(0, 2).toUpperCase();
     return React.createElement('div', { className: 'role-pick', style: { position: 'relative' } },
-      React.createElement('div', { className: 'role-avatar' }, initials[role]),
+      React.createElement('div', { className: 'role-avatar' }, initials),
       React.createElement('div', { className: 'role-meta' },
-        React.createElement('div', { className: 'role-name' }, t('role.' + role).replace(/\s*\(.*\)/, ''))));
+        React.createElement('div', { className: 'role-name' }, name),
+        React.createElement('div', { className: 'role-sub', style: { fontSize: 10, color: 'var(--text-faint)' } }, isAdmin ? (lang === 'th' ? 'ผู้ดูแลระบบ' : 'Admin') : (lang === 'th' ? 'ผู้ใช้งาน' : 'Staff'))));
   }
 
   /* ---------------- Shell ---------------- */
-  function Shell({ tweaks, setTweak, lang, setLang, onLogout }) {
-    const [route, setRoute] = React.useState(() => firstAllowed(tweaks.role));
+  function Shell({ me, tweaks, setTweak, lang, setLang, onLogout }) {
+    const myPerms = userPerms(me);
+    const permsKey = myPerms.join(',');
+    const isAdmin = !!(me && me.role === 'admin');
+    const [route, setRoute] = React.useState(() => firstAllowed(myPerms));
     const [state, setStateRaw] = React.useState(null);
     const t = (k, v) => tr(lang, k, v);
-    const role = tweaks.role;
 
     // setState passed to modules: update React state AND persist the snapshot.
     const setState = React.useCallback((updater) => {
@@ -138,17 +154,17 @@
       return () => { mounted = false; unsub(); };
     }, []);
 
-    React.useEffect(() => { if (!allowed(role, route)) setRoute(firstAllowed(role)); }, [role]);
+    React.useEffect(() => { if (!allowed(myPerms, route)) setRoute(firstAllowed(myPerms)); }, [permsKey]);
 
-    const go = (r) => { if (allowed(role, r)) setRoute(r); };
+    const go = (r) => { if (allowed(myPerms, r)) setRoute(r); };
     React.useEffect(() => { window.__pgGo = go; });
 
     if (!state) return React.createElement('div', { style: { display: 'grid', placeItems: 'center', height: '100vh', background: 'var(--bg)', color: 'var(--text-muted)', fontSize: 14 } },
       lang === 'th' ? 'กำลังโหลดข้อมูลจากเซิร์ฟเวอร์…' : 'Loading data from server…');
 
-    // Delete actions are limited to admin and PPC across all modules
-    const canDelete = role === 'admin' || role === 'ppc';
-    const props = { state, setState, go, canDelete, role };
+    // Delete actions + admin-only data tools are limited to full-access (Admin) users
+    const canDelete = isAdmin;
+    const props = { state, setState, go, canDelete, role: isAdmin ? 'admin' : 'staff', me };
     const waitingCount = (state.orders || []).filter(o => o.status === 'waiting').length;
 
     const curLabel = t(NAV_LABEL[route] || 'nav.dashboard');
@@ -164,7 +180,7 @@
             React.createElement('div', { className: 'sb-brand-sub' }, lang === 'th' ? 'ระบบ PPC' : 'PPC System'))),
         React.createElement('div', { className: 'sb-scroll' },
           NAV.map(sec => {
-            const items = sec.items.filter(i => allowed(role, i.k));
+            const items = sec.items.filter(i => allowed(myPerms, i.k));
             if (!items.length) return null;
             return React.createElement('div', { key: sec.sec },
               React.createElement('div', { className: 'sb-section-label' }, t(sec.sec)),
@@ -191,9 +207,9 @@
           React.createElement(LangToggle, { lang, setLang }),
           React.createElement('button', { className: 'tb-icon-btn' }, React.createElement(Icon, { name: 'bell', size: 16 }), React.createElement('span', { className: 'tb-dot' })),
           React.createElement('button', { className: 'tb-icon-btn', title: t('btn.login'), onClick: onLogout }, React.createElement(Icon, { name: 'logout', size: 16 })),
-          React.createElement(RoleSwitch, { role, setRole: (r) => setTweak('role', r), lang })),
+          React.createElement(RoleSwitch, { me, isAdmin, lang })),
         React.createElement('main', { className: 'content' },
-          (ROUTES[allowed(role, route) ? route : firstAllowed(role)] || ROUTES.dashboard)(props))));
+          (ROUTES[allowed(myPerms, route) ? route : firstAllowed(myPerms)] || ROUTES.dashboard)(props))));
   }
 
   /* ---------------- Root ---------------- */
@@ -203,7 +219,8 @@
     const { useTweaks, TweaksPanel, TweakSection, TweakRadio } = window;
     const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
     const [lang, setLangRaw] = React.useState(() => localStorage.getItem('pg_lang') || 'th');
-    const [auth, setAuth] = React.useState(() => localStorage.getItem('pg_auth') === '1');
+    const [me, setMe] = React.useState(() => { try { return JSON.parse(localStorage.getItem('pg_user') || 'null'); } catch (e) { return null; } });
+    const auth = !!me;
     const setLang = (l) => { setLangRaw(l); localStorage.setItem('pg_lang', l); };
 
     React.useEffect(() => { document.body.setAttribute('data-density', tweaks.density); }, [tweaks.density]);
@@ -211,17 +228,17 @@
     React.useEffect(() => { document.body.setAttribute('lang', lang); }, [lang]);
 
     const t = (k, v) => tr(lang, k, v);
-    const login = (role) => { setAuth(true); localStorage.setItem('pg_auth', '1'); if (role) { setTweak('role', role); localStorage.setItem('pg_role', role); } };
-    const logout = () => { setAuth(false); localStorage.removeItem('pg_auth'); };
+    const login = (user) => {
+      const m = { username: user.username, name: user.name, role: user.role, perms: Array.isArray(user.perms) ? user.perms : null };
+      setMe(m); localStorage.setItem('pg_user', JSON.stringify(m));
+    };
+    const logout = () => { setMe(null); localStorage.removeItem('pg_user'); localStorage.removeItem('pg_auth'); };
 
     return React.createElement(I18nContext.Provider, { value: { lang, t } },
       React.createElement(ToastProvider, null,
-        auth ? React.createElement(Shell, { tweaks, setTweak, lang, setLang, onLogout: logout })
+        auth ? React.createElement(Shell, { me, tweaks, setTweak, lang, setLang, onLogout: logout })
              : React.createElement(Login, { lang, setLang, onLogin: login }),
         React.createElement(TweaksPanel, { title: 'Tweaks' },
-          React.createElement(TweakSection, { label: lang === 'th' ? 'บทบาทผู้ใช้' : 'Active role' }),
-          React.createElement(TweakRadio, { label: lang === 'th' ? 'บทบาท' : 'Role', value: tweaks.role,
-            options: ['admin', 'ppc', 'warehouse', 'production', 'management'], onChange: (v) => setTweak('role', v) }),
           React.createElement(TweakSection, { label: lang === 'th' ? 'การแสดงผล' : 'Display' }),
           React.createElement(TweakRadio, { label: lang === 'th' ? 'ความหนาแน่น' : 'Density', value: tweaks.density,
             options: ['compact', 'comfortable'], onChange: (v) => setTweak('density', v) }),

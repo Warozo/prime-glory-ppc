@@ -331,7 +331,10 @@
     const { t, lang } = useI18n();
     const toast = useToast();
     const [modal, setModal] = React.useState(null); // { mode:'add' } | { mode:'edit', user }
-    const ROLE_COLOR = { admin: '#cf3b3b', ppc: '#2d5bd7', warehouse: '#7b5cd9', production: '#e08a1e', management: '#1f8a5b' };
+    const ROLE_COLOR = { admin: '#cf3b3b', staff: '#2d5bd7', ppc: '#2d5bd7', warehouse: '#7b5cd9', production: '#e08a1e', management: '#1f8a5b' };
+    const ALL_KEYS = (window.PG_NAV || []).reduce((a, s) => a.concat(s.items.map(i => i.k)), []);
+    const LEGACY = { ppc: ALL_KEYS.filter(k => k !== 'users'), management: ALL_KEYS.filter(k => k !== 'users'), warehouse: ['receiving', 'issue', 'fgreceiving', 'fgsales', 'stock'], production: ['dashboard', 'schedule', 'designer', 'shopfloor', 'qa'] };
+    const permCount = (u) => u.role === 'admin' ? ALL_KEYS.length : (Array.isArray(u.perms) ? u.perms.length : (LEGACY[u.role] || []).length);
 
     function toggle(id) { setState(prev => ({ ...prev, users: prev.users.map(u => u.id === id ? { ...u, status: u.status === 'A' ? 'I' : 'A' } : u) })); toast(t('toast.saved')); }
     function resetPw(u) {
@@ -345,14 +348,21 @@
       if (state.users.some(u => u.username === uname && (!isEdit || u.id !== modal.user.id))) {
         toast(lang === 'th' ? 'ชื่อผู้ใช้ซ้ำ' : 'Username already exists', 'warn'); return;
       }
+      const role = f.admin ? 'admin' : 'staff';
+      const perms = f.admin ? [] : (f.perms || []);
+      // keep at least one active Admin (full access)
+      if (isEdit && modal.user.role === 'admin' && role !== 'admin') {
+        const activeAdmins = state.users.filter(x => x.role === 'admin' && x.status === 'A');
+        if (activeAdmins.length <= 1) { toast(lang === 'th' ? 'ต้องมีผู้ดูแลระบบ (สิทธิ์เต็ม) อย่างน้อย 1 คน' : 'Keep at least one Admin (full access)', 'warn'); return; }
+      }
       setState(prev => {
         if (isEdit) {
           return { ...prev, users: prev.users.map(u => u.id === modal.user.id
-            ? { ...u, name: f.name, username: uname, email: f.email, role: f.role, password: f.password ? f.password : u.password } : u) };
+            ? { ...u, name: f.name, username: uname, email: f.email, role, perms, password: f.password ? f.password : u.password } : u) };
         }
         const nums = prev.users.map(x => parseInt((x.id || '').replace(/\D/g, ''), 10)).filter(n => !isNaN(n));
         const id = 'U' + String((nums.length ? Math.max.apply(null, nums) : 0) + 1).padStart(2, '0');
-        return { ...prev, users: [...prev.users, { id, username: uname, name: f.name, email: f.email, role: f.role, status: 'A', last: prev.today, password: f.password }] };
+        return { ...prev, users: [...prev.users, { id, username: uname, name: f.name, email: f.email, role, perms, status: 'A', last: prev.today, password: f.password }] };
       });
       toast(isEdit ? t('toast.saved') : t('toast.usercreated')); setModal(null);
     }
@@ -371,15 +381,17 @@
         React.createElement('table', { className: 'tbl' },
           React.createElement('thead', null, React.createElement('tr', null,
             React.createElement('th', null, t('f.name')), React.createElement('th', null, t('f.username')), React.createElement('th', null, t('f.password')), React.createElement('th', null, t('f.email')),
-            React.createElement('th', null, t('f.role')), React.createElement('th', null, lang === 'th' ? 'เข้าใช้ล่าสุด' : 'Last login'), React.createElement('th', null, t('f.status')), React.createElement('th', { style: { width: 230 } }, ''))),
+            React.createElement('th', null, lang === 'th' ? 'สิทธิ์การเข้าถึง' : 'Access'), React.createElement('th', null, lang === 'th' ? 'เข้าใช้ล่าสุด' : 'Last login'), React.createElement('th', null, t('f.status')), React.createElement('th', { style: { width: 230 } }, ''))),
           React.createElement('tbody', null, state.users.map(u => React.createElement('tr', { key: u.id },
             React.createElement('td', null, React.createElement('div', { className: 'row', style: { gap: 9 } },
-              React.createElement('span', { style: { width: 28, height: 28, borderRadius: '50%', background: ROLE_COLOR[u.role], color: '#fff', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 700 } }, u.name.split(' ').map(x => x[0]).join('').slice(0, 2)),
+              React.createElement('span', { style: { width: 28, height: 28, borderRadius: '50%', background: ROLE_COLOR[u.role] || '#2d5bd7', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 700 } }, u.name.split(' ').map(x => x[0]).join('').slice(0, 2)),
               React.createElement('span', { style: { fontWeight: 600 } }, u.name))),
             React.createElement('td', { className: 'mono' }, u.username),
             React.createElement('td', null, React.createElement(PwCell, { pw: u.password || '\u2014' })),
             React.createElement('td', { className: 'faint' }, u.email),
-            React.createElement('td', null, React.createElement('span', { className: 'badge', style: { color: ROLE_COLOR[u.role], background: 'color-mix(in srgb,' + ROLE_COLOR[u.role] + ' 12%,white)' } }, t('role.' + u.role))),
+            React.createElement('td', null, u.role === 'admin'
+              ? React.createElement('span', { className: 'badge', style: { color: 'var(--danger)', background: 'var(--danger-tint)' } }, lang === 'th' ? 'ผู้ดูแลระบบ (สิทธิ์เต็ม)' : 'Admin (full)')
+              : React.createElement('span', { className: 'badge badge-soft' }, permCount(u) + '/' + ALL_KEYS.length + (lang === 'th' ? ' ส่วน' : ' sections'))),
             React.createElement('td', { className: 'mono faint' }, fmtDate(u.last)),
             React.createElement('td', null, React.createElement('span', { className: 'badge', style: { color: u.status === 'A' ? 'var(--ok)' : 'var(--text-muted)', background: u.status === 'A' ? 'var(--ok-tint)' : 'var(--surface-3)' } }, u.status === 'A' ? t('f.active') : t('f.inactive'))),
             React.createElement('td', null, React.createElement('div', { className: 'row', style: { gap: 5 } },
@@ -399,25 +411,47 @@
   }
 
   function UserModal({ state, t, lang, edit, onClose, onSubmit }) {
-    const [f, setF] = React.useState(edit
-      ? { name: edit.name, username: edit.username, email: edit.email || '', role: edit.role, password: '' }
-      : { name: '', username: '', email: '', role: 'ppc', password: '' });
+    const NAV = window.PG_NAV || [];
+    const ALL_KEYS = NAV.reduce((a, s) => a.concat(s.items.map(i => i.k)), []);
+    const LEGACY = { ppc: ALL_KEYS.filter(k => k !== 'users'), management: ALL_KEYS.filter(k => k !== 'users'), warehouse: ['receiving', 'issue', 'fgreceiving', 'fgsales', 'stock'], production: ['dashboard', 'schedule', 'designer', 'shopfloor', 'qa'] };
+    const initPerms = edit
+      ? (edit.role === 'admin' ? ['dashboard'] : (Array.isArray(edit.perms) ? edit.perms.slice() : (LEGACY[edit.role] || ['dashboard']).slice()))
+      : ['dashboard'];
+    const [f, setF] = React.useState({ name: edit ? edit.name : '', username: edit ? edit.username : '', email: edit ? (edit.email || '') : '', password: '', admin: edit ? edit.role === 'admin' : false, perms: initPerms });
     const set = (k, v) => setF(p => ({ ...p, [k]: v }));
+    const togglePerm = (k) => setF(p => ({ ...p, perms: p.perms.indexOf(k) >= 0 ? p.perms.filter(x => x !== k) : p.perms.concat([k]) }));
+    const setAll = (on) => setF(p => ({ ...p, perms: on ? ALL_KEYS.slice() : [] }));
     const gen = () => set('password', Math.random().toString(36).slice(2, 10));
-    const valid = f.name && f.username.trim() && (edit || f.password);
-    return React.createElement(Modal, { title: (edit ? t('btn.edit') : t('btn.new')) + ' · ' + t('nav.users'), onClose, width: 480,
+    const valid = f.name && f.username.trim() && (edit || f.password) && (f.admin || f.perms.length > 0);
+    return React.createElement(Modal, { title: (edit ? t('btn.edit') : t('btn.new')) + ' · ' + t('nav.users'), onClose, width: 560,
       footer: React.createElement(React.Fragment, null, React.createElement('button', { className: 'btn', onClick: onClose }, t('btn.cancel')),
         React.createElement('button', { className: 'btn btn-pri', disabled: !valid, onClick: () => onSubmit(f) }, edit ? t('btn.save') : t('users.create'))) },
       React.createElement('div', { className: 'grid g-2', style: { gap: 12 } },
         React.createElement('div', { style: { gridColumn: 'span 2' } }, React.createElement(Field, { label: t('f.name'), required: true }, React.createElement('input', { className: 'input', value: f.name, onChange: e => set('name', e.target.value) }))),
         React.createElement(Field, { label: t('f.username'), required: true }, React.createElement('input', { className: 'input mono', value: f.username, onChange: e => set('username', e.target.value), placeholder: 'first.last' })),
-        React.createElement(Field, { label: t('f.role'), required: true }, React.createElement('select', { className: 'select', value: f.role, onChange: e => set('role', e.target.value) },
-          ['admin', 'ppc', 'warehouse', 'production', 'management'].map(r => React.createElement('option', { key: r, value: r }, t('role.' + r))))),
+        React.createElement(Field, { label: t('f.email') }, React.createElement('input', { className: 'input', type: 'email', value: f.email, onChange: e => set('email', e.target.value) })),
         React.createElement('div', { style: { gridColumn: 'span 2' } }, React.createElement(Field, { label: t('f.password'), required: !edit, hint: edit ? (lang === 'th' ? 'เว้นว่างถ้าไม่เปลี่ยนรหัสผ่าน' : 'Leave blank to keep current password') : t('users.pwhint') },
           React.createElement('div', { className: 'row', style: { gap: 8 } },
             React.createElement('input', { className: 'input mono', value: f.password, onChange: e => set('password', e.target.value), placeholder: '••••••••' }),
             React.createElement('button', { className: 'btn btn-sm', type: 'button', onClick: gen }, t('users.generate'))))),
-        React.createElement('div', { style: { gridColumn: 'span 2' } }, React.createElement(Field, { label: t('f.email') }, React.createElement('input', { className: 'input', type: 'email', value: f.email, onChange: e => set('email', e.target.value) })))));
+        React.createElement('div', { style: { gridColumn: 'span 2', borderTop: '1px solid var(--border)', paddingTop: 12 } },
+          React.createElement('label', { style: { display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13 } },
+            React.createElement('input', { type: 'checkbox', checked: f.admin, onChange: e => set('admin', e.target.checked) }),
+            React.createElement('span', null, lang === 'th' ? 'ผู้ดูแลระบบ (สิทธิ์เต็ม — เห็นทุกส่วน)' : 'Admin (full access — all sections)')),
+          f.admin
+            ? React.createElement('div', { className: 'faint', style: { fontSize: 11.5, marginTop: 8 } }, lang === 'th' ? 'ผู้ใช้นี้เห็นและจัดการได้ทุกส่วน รวมถึงจัดการผู้ใช้' : 'This user can see and manage everything, including users')
+            : React.createElement('div', { style: { marginTop: 10 } },
+                React.createElement('div', { className: 'row', style: { marginBottom: 8 } },
+                  React.createElement('span', { style: { fontSize: 11.5, fontWeight: 600, color: 'var(--text-muted)' } }, (lang === 'th' ? 'อนุญาตให้เห็นแถบเมนู ' : 'Visible sections ') + '(' + f.perms.length + '/' + ALL_KEYS.length + ')'),
+                  React.createElement('div', { className: 'row', style: { marginLeft: 'auto', gap: 6 } },
+                    React.createElement('button', { type: 'button', className: 'btn btn-sm', onClick: () => setAll(true) }, lang === 'th' ? 'เลือกทั้งหมด' : 'All'),
+                    React.createElement('button', { type: 'button', className: 'btn btn-sm', onClick: () => setAll(false) }, lang === 'th' ? 'ล้าง' : 'None'))),
+                React.createElement('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 18px' } },
+                  NAV.map(sec => React.createElement('div', { key: sec.sec },
+                    React.createElement('div', { style: { fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.4px', color: 'var(--text-faint)', marginBottom: 4 } }, t(sec.sec)),
+                    sec.items.map(it => React.createElement('label', { key: it.k, style: { display: 'flex', alignItems: 'center', gap: 7, padding: '3px 0', cursor: 'pointer', fontSize: 12 } },
+                      React.createElement('input', { type: 'checkbox', checked: f.perms.indexOf(it.k) >= 0, onChange: () => togglePerm(it.k) }),
+                      React.createElement('span', null, t('nav.' + it.k)))))))))));
   }
 
   /* ---------------- Partners / Staff registry ---------------- */
