@@ -359,7 +359,7 @@
           React.createElement(DateField, { value: day, onChange: setDay, style: { width: 150 } }),
           React.createElement('span', { className: 'badge badge-soft mono' }, fmt(dayTotal) + ' ' + t('u.units')))),
       React.createElement('div', { style: { overflowX: 'auto' } },
-        React.createElement('table', { className: 'tbl', style: { minWidth: Math.max(560, 120 + lot.steps.length * 92) } },
+        React.createElement('table', { className: 'tbl tbl-grid', style: { minWidth: Math.max(560, 120 + lot.steps.length * 92) } },
           // header: time column + one column per step
           React.createElement('thead', null, React.createElement('tr', null,
             React.createElement('th', { style: { position: 'sticky', left: 0, zIndex: 2, background: 'var(--surface-2)', minWidth: 118 } }, lang === 'th' ? 'ช่วงเวลา' : 'Time'),
@@ -441,7 +441,7 @@
               React.createElement('div', { style: { marginTop: 8, fontSize: 12.5 } }, lang === 'th' ? 'ยังไม่มีข้อมูล Defect จากสถานี QA' : 'No QA defect data yet'),
               React.createElement('div', { className: 'faint', style: { fontSize: 11, marginTop: 3 } }, lang === 'th' ? 'เมื่อสถานี QA รายงานของเสีย จะแสดงที่นี่' : 'Defects reported at QA stations will appear here'))
           : React.createElement('div', { style: { overflowX: 'auto' } },
-              React.createElement('table', { className: 'tbl', style: { minWidth: Math.max(760, 280 + cols.length * 54) } },
+              React.createElement('table', { className: 'tbl tbl-grid', style: { minWidth: Math.max(760, 280 + cols.length * 54) } },
                 React.createElement('thead', null, React.createElement('tr', null,
                   React.createElement('th', { style: { position: 'sticky', left: 0, zIndex: 2, background: 'var(--surface-2)', minWidth: 230 } }, lang === 'th' ? 'สาย / ใบสั่งผลิต · ขั้น QA' : 'Line / Order · QA step'),
                   cols.map(c => React.createElement('th', { key: c.k, className: 'num', style: { whiteSpace: 'nowrap', textAlign: c.k === 'lunch' ? 'center' : 'right', background: c.k === 'lunch' ? 'var(--surface-3)' : 'var(--surface-2)' } }, c.k === 'lunch' ? (lang === 'th' ? 'พักเที่ยง' : 'Lunch') : c.label)),
