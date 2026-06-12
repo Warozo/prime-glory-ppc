@@ -7,7 +7,7 @@
   const { PageHead, Icon, fmt, fmtDate, useToast, PriorityBadge, Modal, Field, DateField } = window.PG_UI;
   const D = window.PG_DATA;
 
-  const DAYS = 12, DAY_W = 62, ROW_H = 58, LABEL_W = 178;
+  const DAYS = 12, DAY_W = 62, ROW_H = 82, LABEL_W = 178;
   const LINE_COLORS = { A: '#2d5bd7', B: '#7b5cd9', C: '#1f8a5b' };
 
   function Schedule({ state, setState, go }) {
@@ -297,11 +297,11 @@
     const pct = bar.qty > 0 ? Math.min(100, Math.round((produced || 0) / bar.qty * 100)) : 0;
     return React.createElement('div', {
       onPointerDown: (e) => onPointerDown(e, bar, 'move'),
-      // keep a minimum width so the start button / status stay readable on short (narrow) bars
-      style: { position: 'absolute', left: (bar.startDay - (startOffset || 0)) * DAY_W + 3, top: 7, width: Math.max(bar.days * DAY_W - 6, 140), height: ROW_H - 14,
+      // width follows the duration exactly (can be a single day); the taller row gives room for text
+      style: { position: 'absolute', left: (bar.startDay - (startOffset || 0)) * DAY_W + 3, top: 7, width: bar.days * DAY_W - 6, height: ROW_H - 14,
         background: 'color-mix(in srgb,' + col + ' 14%, white)', border: '1.5px solid ' + col, borderLeft: '3px solid ' + col,
-        borderRadius: 6, padding: '4px 8px', cursor: 'grab', boxShadow: active ? '0 4px 14px rgba(18,32,56,.18)' : 'var(--shadow-sm)',
-        zIndex: active ? 5 : 1, overflow: 'hidden', userSelect: 'none', transition: active ? 'none' : 'box-shadow .15s' } },
+        borderRadius: 6, padding: '5px 9px', cursor: 'grab', boxShadow: active ? '0 4px 14px rgba(18,32,56,.18)' : 'var(--shadow-sm)',
+        zIndex: active ? 5 : 1, overflow: 'hidden', userSelect: 'none', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 2, transition: active ? 'none' : 'box-shadow .15s' } },
       React.createElement('div', { className: 'row', style: { justifyContent: 'space-between', gap: 4 } },
         React.createElement('span', { className: 'mono', style: { fontSize: 10, fontWeight: 700, color: col, display: 'flex', alignItems: 'center', gap: 3 } },
           started && React.createElement(Icon, { name: 'lock', size: 9 }), bar.id),
