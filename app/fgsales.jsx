@@ -17,6 +17,16 @@
     const sales = state.fgSales || [];
     const totalOut = sales.reduce((a, s) => a + s.lines.reduce((b, l) => b + l.qty, 0), 0);
     const fgTotal = state.fgStock.reduce((a, x) => a + x.qty, 0);
+    const [sq, setSq] = React.useState('');
+    const [sFrom, setSFrom] = React.useState('');
+    const [sTo, setSTo] = React.useState('');
+    const sNeedle = sq.trim().toLowerCase();
+    const salesFiltered = sales.filter(s => {
+      if (sFrom && (s.date || '') < sFrom) return false;
+      if (sTo && (s.date || '') > sTo) return false;
+      if (sNeedle) { const prod = (s.lines || []).map(l => D.fgName(state, l.fg, lang)).join(' '); const hay = ((s.id || '') + ' ' + (s.customer || '') + ' ' + (s.rep || '') + ' ' + prod).toLowerCase(); if (hay.indexOf(sNeedle) < 0) return false; }
+      return true;
+    });
 
     function commit(form) {
       setState(prev => {
@@ -50,14 +60,20 @@
         e('div', { className: 'span-8' },
           e('div', { className: 'card' },
             e('div', { className: 'card-h' }, e(Icon, { name: 'export', size: 15, style: { color: 'var(--primary)' } }), e('h3', null, t('fgs.report')),
-              e('span', { className: 'card-h-actions badge badge-soft' }, sales.length + ' ' + t('fgs.docs'))),
-            sales.length === 0
+              e('span', { className: 'card-h-actions badge badge-soft' }, salesFiltered.length + ' / ' + sales.length + ' ' + t('fgs.docs'))),
+            sales.length > 0 && e('div', { style: { padding: '10px 14px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' } },
+              e('input', { className: 'input', style: { flex: '1 1 180px', minWidth: 150 }, placeholder: lang === 'th' ? 'ค้นหา เลขที่ / ลูกค้า / พนักงานขาย / สินค้า' : 'Search doc / customer / rep / product', value: sq, onChange: ev => setSq(ev.target.value) }),
+              e(DateField, { value: sFrom, onChange: setSFrom, style: { width: 130 } }),
+              e('span', { className: 'faint' }, '–'),
+              e(DateField, { value: sTo, onChange: setSTo, style: { width: 130 } }),
+              (sq || sFrom || sTo) && e('button', { className: 'btn btn-sm', onClick: () => { setSq(''); setSFrom(''); setSTo(''); } }, lang === 'th' ? 'ล้าง' : 'Clear')),
+            salesFiltered.length === 0
               ? e('div', { className: 'empty' }, e(Icon, { name: 'export', size: 24 }), e('div', { style: { marginTop: 8 } }, t('tbl.noresults')))
               : e('table', { className: 'tbl' },
                   e('thead', null, e('tr', null,
                     e('th', null, t('fgs.docno')), e('th', null, t('f.date')), e('th', null, t('f.customer')),
                     e('th', null, t('fgs.salesrep')), e('th', null, t('f.product')), e('th', { className: 'num' }, t('fgs.totalout')))),
-                  e('tbody', null, sales.map(s => e('tr', { key: s.id },
+                  e('tbody', null, salesFiltered.map(s => e('tr', { key: s.id },
                     e('td', { className: 'mono', style: { fontWeight: 600, color: 'var(--primary)' } }, s.id),
                     e('td', { className: 'mono faint' }, fmtDate(s.date)),
                     e('td', null, s.customer),

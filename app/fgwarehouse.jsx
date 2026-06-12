@@ -14,6 +14,14 @@
     const [recv, setRecv] = React.useState(null); // pending item being received
     const pending = state.fgPending.filter(f => f.status === 'pending');
     const accepted = state.fgPending.filter(f => f.status === 'accepted');
+    const [fpq, setFpq] = React.useState('');
+    const [fpStatus, setFpStatus] = React.useState('');
+    const fpNeedle = fpq.trim().toLowerCase();
+    const fpFiltered = state.fgPending.filter(f => {
+      if (fpStatus && f.status !== fpStatus) return false;
+      if (fpNeedle) { const hay = ((f.id || '') + ' ' + (f.po || '') + ' ' + D.fgName(state, f.fg, lang)).toLowerCase(); if (hay.indexOf(fpNeedle) < 0) return false; }
+      return true;
+    });
 
     function received(f) { return (f.receipts || []).reduce((a, r) => a + r.qty, 0); }
     function producedOf(f) { return f.produced != null ? f.produced : f.qty; }
@@ -68,7 +76,15 @@
 
       e('div', { className: 'card' },
         e('div', { className: 'card-h' }, e(Icon, { name: 'fg', size: 15, style: { color: 'var(--primary)' } }), e('h3', null, t('status.pending')),
-          e('span', { className: 'badge badge-soft', style: { marginLeft: 'auto' } }, pending.length)),
+          e('span', { className: 'badge badge-soft', style: { marginLeft: 'auto' } }, fpFiltered.length + ' / ' + state.fgPending.length)),
+        state.fgPending.length > 0 && e('div', { style: { padding: '10px 14px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' } },
+          e('input', { className: 'input', style: { flex: '1 1 200px', minWidth: 160 }, placeholder: lang === 'th' ? 'ค้นหา FR# / ใบสั่งผลิต / สินค้า' : 'Search FR# / PO / product', value: fpq, onChange: ev => setFpq(ev.target.value) }),
+          e('select', { className: 'select', style: { width: 160 }, value: fpStatus, onChange: ev => setFpStatus(ev.target.value) },
+            e('option', { value: '' }, lang === 'th' ? 'ทุกสถานะ' : 'All statuses'),
+            e('option', { value: 'pending' }, t('status.pending')),
+            e('option', { value: 'accepted' }, t('status.accepted')),
+            e('option', { value: 'rejected' }, lang === 'th' ? 'ปฏิเสธ' : 'Rejected')),
+          (fpq || fpStatus) && e('button', { className: 'btn btn-sm', onClick: () => { setFpq(''); setFpStatus(''); } }, lang === 'th' ? 'ล้าง' : 'Clear')),
         e('table', { className: 'tbl' },
           e('thead', null, e('tr', null,
             e('th', null, 'FR#'), e('th', null, t('f.po')), e('th', null, t('f.product')),
@@ -76,9 +92,9 @@
             e('th', { className: 'num' }, t('fg.ready')), e('th', { style: { width: 110 } }, t('f.progress')),
             e('th', null, t('f.status')), e('th', { style: { width: 170 } }, ''))),
           e('tbody', null,
-            state.fgPending.length === 0
+            fpFiltered.length === 0
               ? e('tr', null, e('td', { colSpan: 10, className: 'empty' }, t('tbl.noresults')))
-              : state.fgPending.map(f => {
+              : fpFiltered.map(f => {
               const rec = received(f), prod = producedOf(f), ready = readyToReceive(f), pct = Math.round(rec / f.qty * 100);
               return e(React.Fragment, { key: f.id },
                 e('tr', null,

@@ -14,9 +14,26 @@
 
     const nearExp = state.lots.filter(l => { const d = (new Date(l.expiry) - new Date(state.today)) / 864e5; return d <= 30 && l.remaining > 0; });
 
+    // filter for the recent-receipts table
+    const [fq, setFq] = React.useState('');
+    const [fFrom, setFFrom] = React.useState('');
+    const [fTo, setFTo] = React.useState('');
+    const [fSup, setFSup] = React.useState('');
+    const rNeedle = fq.trim().toLowerCase();
+    const recFiltered = state.receipts.filter(r => {
+      if (fSup && r.supplier !== fSup) return false;
+      if (fFrom && (r.recv || '') < fFrom) return false;
+      if (fTo && (r.recv || '') > fTo) return false;
+      if (rNeedle) { const hay = (r.id + ' ' + (r.supplier || '') + ' ' + D.rmName(state, r.rm, lang) + ' ' + r.rm + ' ' + (r.lot || '')).toLowerCase(); if (hay.indexOf(rNeedle) < 0) return false; }
+      return true;
+    });
+    const recSuppliers = Array.from(new Set(state.receipts.map(r => r.supplier).filter(Boolean)));
+
     function receive(form) {
-      const id = 'GR-' + Math.floor(3311 + Math.random() * 600);
-      const lotId = 'L-' + Math.floor(9011 + Math.random() * 800);
+      const id = (form.id || '').trim();
+      if (!id) { toast(lang === 'th' ? 'กรอกเลขที่ GR' : 'Enter GR number', 'warn'); return; }
+      if (state.receipts.some(r => r.id === id)) { toast(lang === 'th' ? 'เลขที่ GR ซ้ำ' : 'GR number already exists', 'warn'); return; }
+      const lotId = D.genId('L');
       setState(prev => ({ ...prev,
         receipts: [{ id, recv: form.recv, supplier: form.supplier, rm: form.rm, qty: +form.qty, lot: form.lot, expiry: form.expiry }, ...prev.receipts],
         lots: [{ id: lotId, rm: form.rm, supplier: form.supplier, qty: +form.qty, remaining: +form.qty, lot: form.lot, expiry: form.expiry, recv: form.recv }, ...prev.lots],
@@ -36,12 +53,21 @@
         React.createElement('div', { className: 'span-7' },
           React.createElement('div', { className: 'card' },
             React.createElement('div', { className: 'card-h' }, React.createElement(Icon, { name: 'receive', size: 15, style: { color: 'var(--primary)' } }), React.createElement('h3', null, t('wh.recentrecv'))),
+            React.createElement('div', { style: { padding: '10px 14px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' } },
+              React.createElement('input', { className: 'input', style: { flex: '1 1 150px', minWidth: 120 }, placeholder: lang === 'th' ? 'ค้นหา GR# / ชื่อ / ล็อต / ผู้ขาย' : 'Search GR# / name / lot / supplier', value: fq, onChange: e => setFq(e.target.value) }),
+              React.createElement(DateField, { value: fFrom, onChange: setFFrom, style: { width: 130 } }),
+              React.createElement('span', { className: 'faint' }, '–'),
+              React.createElement(DateField, { value: fTo, onChange: setFTo, style: { width: 130 } }),
+              React.createElement('select', { className: 'select', style: { width: 150 }, value: fSup, onChange: e => setFSup(e.target.value) },
+                [React.createElement('option', { key: '_all', value: '' }, lang === 'th' ? 'ทุกผู้ขาย' : 'All suppliers')].concat(recSuppliers.map(s => React.createElement('option', { key: s, value: s }, s)))),
+              React.createElement('span', { className: 'badge badge-soft', style: { fontSize: 11 } }, recFiltered.length + ' / ' + state.receipts.length),
+              (fq || fFrom || fTo || fSup) && React.createElement('button', { className: 'btn btn-sm', onClick: () => { setFq(''); setFFrom(''); setFTo(''); setFSup(''); } }, lang === 'th' ? 'ล้าง' : 'Clear')),
             React.createElement('table', { className: 'tbl' },
               React.createElement('thead', null, React.createElement('tr', null,
                 ['id', 'date', 'supplier', 'item', 'qty', 'lot', 'expiry'].map((k, i) => React.createElement('th', { key: k, className: i === 4 ? 'num' : '' },
                   k === 'id' ? 'GR#' : t('f.' + (k === 'date' ? 'date' : k === 'item' ? 'name' : k === 'qty' ? 'qty' : k))) ))),
               React.createElement('tbody', null,
-                state.receipts.map(r => React.createElement('tr', { key: r.id },
+                recFiltered.map(r => React.createElement('tr', { key: r.id },
                   React.createElement('td', { className: 'mono', style: { fontWeight: 600, color: 'var(--primary)' } }, r.id),
                   React.createElement('td', { className: 'mono faint' }, fmtDate(r.recv)),
                   React.createElement('td', null, r.supplier),
@@ -67,14 +93,15 @@
   }
 
   function ReceiveModal({ state, t, lang, onClose, onSubmit }) {
-    const [f, setF] = React.useState({ recv: state.today, supplier: '', rm: state.raw[0].code, qty: '', lot: '', expiry: '' });
+    const [f, setF] = React.useState({ id: '', recv: state.today, supplier: '', rm: state.raw[0].code, qty: '', lot: '', expiry: '' });
     const set = (k, v) => setF(p => ({ ...p, [k]: v }));
-    const valid = f.qty && f.lot && f.expiry && f.supplier.trim();
+    const valid = f.id.trim() && f.qty && f.lot && f.expiry && f.supplier.trim();
     return React.createElement(Modal, { title: t('wh.recv.title'), onClose, width: 540,
       footer: React.createElement(React.Fragment, null,
         React.createElement('button', { className: 'btn', onClick: onClose }, t('btn.cancel')),
         React.createElement('button', { className: 'btn btn-pri', disabled: !valid, onClick: () => onSubmit(f) }, React.createElement(Icon, { name: 'check', size: 14 }), t('btn.receive'))) },
       React.createElement('div', { className: 'grid g-2', style: { gap: 12 } },
+        React.createElement('div', { style: { gridColumn: 'span 2' } }, React.createElement(Field, { label: 'GR#', required: true, hint: lang === 'th' ? 'กรอกเลขที่เอกสารรับเข้าเอง เช่น GR-3652' : 'Enter your own GR number, e.g. GR-3652' }, React.createElement('input', { className: 'input mono', value: f.id, onChange: e => set('id', e.target.value), placeholder: 'GR-____' }))),
         React.createElement(Field, { label: t('f.date'), required: true }, React.createElement(DateField, { value: f.recv, onChange: v => set('recv', v) })),
         React.createElement(Field, { label: t('f.supplier'), required: true, hint: (state.suppliers || []).length === 0 ? (lang === 'th' ? 'เพิ่มผู้ขายได้ที่ ทะเบียนคู่ค้า/พนักงาน' : 'Add suppliers in the Partners registry') : null },
           React.createElement('select', { className: 'select', value: f.supplier, onChange: e => set('supplier', e.target.value) },
