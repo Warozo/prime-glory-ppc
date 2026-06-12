@@ -262,6 +262,7 @@
                     }),
                     // bars
                     lineBars.map(b => React.createElement(Bar, { key: b.id, bar: b, state, lang, t, startOffset, active: activeBar === b.id, started: barStarted(b), completed: barCompleted(b),
+                      produced: (function () { const l = lotOfBar(b); return l ? (l.stations[l.stations.length - 1].cumOut || 0) : 0; })(),
                       onStart: startProduction, onPointerDown: onBarPointerDown }))));
               }))),
           legend)),
@@ -291,25 +292,31 @@
         React.createElement('button', { className: 'btn btn-sm', onClick: () => setQty(String(max)) }, lang === 'th' ? 'ทั้งหมด' : 'All')));
   }
 
-  function Bar({ bar, state, lang, t, startOffset, active, started, completed, onStart, onPointerDown }) {
+  function Bar({ bar, state, lang, t, startOffset, active, started, completed, produced, onStart, onPointerDown }) {
     const col = completed ? 'var(--ok)' : (LINE_COLORS[bar.line] || '#2d5bd7');
+    const pct = bar.qty > 0 ? Math.min(100, Math.round((produced || 0) / bar.qty * 100)) : 0;
     return React.createElement('div', {
       onPointerDown: (e) => onPointerDown(e, bar, 'move'),
-      style: { position: 'absolute', left: (bar.startDay - (startOffset || 0)) * DAY_W + 3, top: 7, width: bar.days * DAY_W - 6, height: ROW_H - 14,
+      // keep a minimum width so the start button / status stay readable on short (narrow) bars
+      style: { position: 'absolute', left: (bar.startDay - (startOffset || 0)) * DAY_W + 3, top: 7, width: Math.max(bar.days * DAY_W - 6, 140), height: ROW_H - 14,
         background: 'color-mix(in srgb,' + col + ' 14%, white)', border: '1.5px solid ' + col, borderLeft: '3px solid ' + col,
         borderRadius: 6, padding: '4px 8px', cursor: 'grab', boxShadow: active ? '0 4px 14px rgba(18,32,56,.18)' : 'var(--shadow-sm)',
         zIndex: active ? 5 : 1, overflow: 'hidden', userSelect: 'none', transition: active ? 'none' : 'box-shadow .15s' } },
       React.createElement('div', { className: 'row', style: { justifyContent: 'space-between', gap: 4 } },
         React.createElement('span', { className: 'mono', style: { fontSize: 10, fontWeight: 700, color: col, display: 'flex', alignItems: 'center', gap: 3 } },
           started && React.createElement(Icon, { name: 'lock', size: 9 }), bar.id),
-        React.createElement('span', { className: 'mono', style: { fontSize: 9.5, color: 'var(--text-muted)' } }, fmt(bar.qty))),
+        React.createElement('span', { className: 'mono', style: { fontSize: 9.5, fontWeight: started ? 700 : 400, color: started ? (completed ? 'var(--ok)' : 'var(--primary)') : 'var(--text-muted)' } },
+          started ? (fmt(produced || 0) + '/' + fmt(bar.qty) + ' (' + pct + '%)') : fmt(bar.qty))),
       React.createElement('div', { className: 'row', style: { justifyContent: 'space-between', gap: 6 } },
         React.createElement('span', { style: { fontSize: 10.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 } }, D.fgName(state, bar.fg, lang)),
         started
-          ? React.createElement('span', { style: { fontSize: 8.5, fontWeight: 700, color: completed ? 'var(--ok)' : 'var(--primary)', display: 'flex', alignItems: 'center', gap: 2 } }, React.createElement(Icon, { name: completed ? 'check' : 'play', size: 8 }), completed ? t('status.completed') : t('sch.producing'))
+          ? React.createElement('span', { style: { fontSize: 8.5, fontWeight: 700, color: completed ? 'var(--ok)' : 'var(--primary)', display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 } }, React.createElement(Icon, { name: completed ? 'check' : 'play', size: 8 }), completed ? t('status.completed') : t('sch.producing'))
           : React.createElement('button', { onPointerDown: (e) => e.stopPropagation(), onClick: (e) => { e.stopPropagation(); onStart(bar); },
               style: { flexShrink: 0, fontSize: 8.5, fontWeight: 700, color: '#fff', background: col, border: 'none', borderRadius: 4, padding: '2px 6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 2 } },
               React.createElement(Icon, { name: 'play', size: 8 }), t('sch.start'))),
+      // cumulative-output progress bar (once started)
+      started && React.createElement('div', { style: { position: 'absolute', left: 4, right: 12, bottom: 2, height: 3, borderRadius: 2, background: 'color-mix(in srgb,' + col + ' 22%, white)' } },
+        React.createElement('div', { style: { width: pct + '%', height: '100%', borderRadius: 2, background: col } })),
       // resize handle
       React.createElement('div', { onPointerDown: (e) => onPointerDown(e, bar, 'resize'),
         style: { position: 'absolute', right: 0, top: 0, bottom: 0, width: 9, cursor: 'ew-resize', display: 'grid', placeItems: 'center' } },
