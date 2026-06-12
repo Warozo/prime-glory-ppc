@@ -314,9 +314,6 @@
           : React.createElement('button', { onPointerDown: (e) => e.stopPropagation(), onClick: (e) => { e.stopPropagation(); onStart(bar); },
               style: { flexShrink: 0, fontSize: 8.5, fontWeight: 700, color: '#fff', background: col, border: 'none', borderRadius: 4, padding: '2px 6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 2 } },
               React.createElement(Icon, { name: 'play', size: 8 }), t('sch.start'))),
-      // cumulative-output progress bar (once started)
-      started && React.createElement('div', { style: { position: 'absolute', left: 4, right: 12, bottom: 2, height: 3, borderRadius: 2, background: 'color-mix(in srgb,' + col + ' 22%, white)' } },
-        React.createElement('div', { style: { width: pct + '%', height: '100%', borderRadius: 2, background: col } })),
       // resize handle
       React.createElement('div', { onPointerDown: (e) => onPointerDown(e, bar, 'resize'),
         style: { position: 'absolute', right: 0, top: 0, bottom: 0, width: 9, cursor: 'ew-resize', display: 'grid', placeItems: 'center' } },
