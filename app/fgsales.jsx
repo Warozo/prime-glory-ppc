@@ -98,19 +98,25 @@
     const setLine = (i, k, v) => setF(p => ({ ...p, lines: p.lines.map((l, idx) => {
       if (idx !== i) return l;
       const nl = { ...l, [k]: v };
-      // when product changes, reset to its first available lot row
-      if (k === 'fg') { nl.sid = (lotsFor(v)[0] || {}).sid || ''; }
+      // when product changes, pick its first lot not already chosen in another line
+      if (k === 'fg') { const used = p.lines.filter((_, j) => j !== i).map(x => x.sid); const av = lotsFor(v).find(s => used.indexOf(s.sid) < 0) || lotsFor(v)[0]; nl.sid = av ? av.sid : ''; }
       return nl;
     }) }));
-    const addLine = () => setF(p => ({ ...p, lines: [...p.lines, { fg: firstFg, sid: firstSid, qty: '' }] }));
+    const addLine = () => setF(p => { const used = p.lines.map(x => x.sid); const av = lotsFor(firstFg).find(s => used.indexOf(s.sid) < 0); return { ...p, lines: [...p.lines, { fg: firstFg, sid: av ? av.sid : '', qty: '' }] }; });
     const delLine = (i) => setF(p => ({ ...p, lines: p.lines.filter((_, idx) => idx !== i) }));
 
     const lineErr = (l) => { const q = +l.qty; if (!q || q <= 0) return true; if (!l.sid) return true; return q > sidQty(l.sid); };
     const dupDoc = f.id.trim() && (state.fgSales || []).some(s => (s.id || '').trim().toLowerCase() === f.id.trim().toLowerCase());
-    const valid = f.id.trim() && !dupDoc && f.customer.trim() && f.lines.length > 0 && f.lines.every(l => !lineErr(l));
+    // total deducted per lot row must not exceed its remaining qty (covers duplicate lot selection)
+    const sidTotals = {};
+    f.lines.forEach(l => { if (l.sid) sidTotals[l.sid] = (sidTotals[l.sid] || 0) + (+l.qty || 0); });
+    const overAlloc = Object.keys(sidTotals).some(sid => sidTotals[sid] > sidQty(sid));
+    const valid = f.id.trim() && !dupDoc && f.customer.trim() && f.lines.length > 0 && f.lines.every(l => !lineErr(l)) && !overAlloc;
 
     const rows = f.lines.map((l, i) => {
-      const lots = lotsFor(l.fg);
+      const usedSids = f.lines.filter((_, idx) => idx !== i).map(x => x.sid);
+      // hide lots already chosen in other lines so the same lot can't be picked twice
+      const lots = lotsFor(l.fg).filter(s => s.sid === l.sid || usedSids.indexOf(s.sid) < 0);
       const avail = sidQty(l.sid);
       const over = +l.qty > avail;
       return e('div', { key: i, style: { display: 'grid', gridTemplateColumns: '0.9fr 1.8fr 92px 30px', gap: 8, alignItems: 'start' } },
