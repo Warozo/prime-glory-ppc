@@ -234,17 +234,20 @@
   }
 
   function BomLineModal({ state, t, lang, line, onClose, onSubmit }) {
-    const [f, setF] = React.useState({ rm: line.rm, qty: line.qty, unit: line.unit });
+    const [f, setF] = React.useState({ rm: line.rm, qty: line.qty });
     const set = (k, v) => setF(p => ({ ...p, [k]: v }));
+    // the unit always follows the raw material's unit from the item master (no manual select)
+    const rmUnit = (state.raw.find(r => r.code === f.rm) || {}).unit || 'pcs';
     return React.createElement(Modal, { title: (line.idx === -1 ? t('bom.addline') : t('bom.editline')), onClose, width: 460,
       footer: React.createElement(React.Fragment, null, React.createElement('button', { className: 'btn', onClick: onClose }, t('btn.cancel')),
-        React.createElement('button', { className: 'btn btn-pri', disabled: !f.qty || +f.qty <= 0, onClick: () => onSubmit({ idx: line.idx, ...f }) }, t('btn.save'))) },
+        React.createElement('button', { className: 'btn btn-pri', disabled: !f.qty || +f.qty <= 0, onClick: () => onSubmit({ idx: line.idx, rm: f.rm, qty: f.qty, unit: rmUnit }) }, t('btn.save'))) },
       React.createElement('div', { className: 'grid g-2', style: { gap: 12 } },
         React.createElement('div', { style: { gridColumn: 'span 2' } }, React.createElement(Field, { label: t('rawmat'), required: true },
           React.createElement('select', { className: 'select', value: f.rm, onChange: e => set('rm', e.target.value) },
-            state.raw.map(r => React.createElement('option', { key: r.code, value: r.code }, r.code + ' · ' + (lang === 'th' ? r.nameTh : r.name)))))),
+            state.raw.map(r => React.createElement('option', { key: r.code, value: r.code }, r.code + ' · ' + (lang === 'th' ? r.nameTh : r.name) + ' (' + (r.unit || '') + ')'))))),
         React.createElement(Field, { label: t('bom.qtyper'), required: true }, React.createElement('input', { className: 'input mono', type: 'number', step: 'any', value: f.qty, onChange: e => set('qty', e.target.value), placeholder: '0' })),
-        React.createElement(Field, { label: t('f.unit'), required: true }, React.createElement('select', { className: 'select', value: f.unit, onChange: e => set('unit', e.target.value) }, ['g', 'kg', 'ml', 'L', 'pcs'].map(u => React.createElement('option', { key: u }, u))))));
+        React.createElement(Field, { label: t('f.unit') + (lang === 'th' ? ' (จากรายการสินค้า)' : ' (from item master)') },
+          React.createElement('div', { className: 'input mono', style: { display: 'flex', alignItems: 'center', background: 'var(--surface-2)', color: 'var(--text-muted)', fontWeight: 600 } }, rmUnit))));
   }
 
   /* ---------------- Customer Orders ---------------- */
