@@ -7,6 +7,22 @@
   const D = window.PG_DATA;
 
   /* ---------------- Item Master ---------------- */
+  // Reusable filter bar: search (code/name) + category + status, with a result count
+  function ItemFilterBar({ lang, q, setQ, catF, setCatF, statusF, setStatusF, cats, count, total }) {
+    const e = React.createElement;
+    return e('div', { className: 'card', style: { marginBottom: 'var(--gap)', padding: 12 } },
+      e('div', { className: 'row', style: { gap: 10, flexWrap: 'wrap', alignItems: 'center' } },
+        e('input', { className: 'input', style: { flex: '1 1 220px', minWidth: 180 }, placeholder: lang === 'th' ? 'ค้นหา รหัส / ชื่อ' : 'Search code / name', value: q, onChange: ev => setQ(ev.target.value) }),
+        e('select', { className: 'select', style: { width: 168 }, value: catF, onChange: ev => setCatF(ev.target.value) },
+          [e('option', { key: '_all', value: '' }, lang === 'th' ? 'ทุกหมวดหมู่' : 'All categories')].concat(cats.map(c => e('option', { key: c, value: c }, c)))),
+        e('select', { className: 'select', style: { width: 150 }, value: statusF, onChange: ev => setStatusF(ev.target.value) },
+          e('option', { value: '' }, lang === 'th' ? 'ทุกสถานะ' : 'All statuses'),
+          e('option', { value: 'A' }, lang === 'th' ? 'ใช้งาน' : 'Active'),
+          e('option', { value: 'I' }, lang === 'th' ? 'ปิดใช้งาน' : 'Inactive')),
+        e('span', { className: 'badge badge-soft', style: { fontSize: 11 } }, count + ' / ' + total),
+        (q || catF || statusF) && e('button', { className: 'btn btn-sm', onClick: () => { setQ(''); setCatF(''); setStatusF(''); } }, lang === 'th' ? 'ล้าง' : 'Clear')));
+  }
+
   function ItemMaster({ state, setState, canDelete }) {
     const { t, lang } = useI18n();
     const toast = useToast();
@@ -14,6 +30,23 @@
     const [modal, setModal] = React.useState(null); // { mode:'add' } | { mode:'edit', item }
     const items = tab === 'rm' ? state.raw : state.fg;
     const key = tab === 'rm' ? 'raw' : 'fg';
+    const [q, setQ] = React.useState('');
+    const [catF, setCatF] = React.useState('');
+    const [statusF, setStatusF] = React.useState('');
+    const switchTab = (tb) => { setTab(tb); setQ(''); setCatF(''); setStatusF(''); };
+    const cats = Array.from(new Set(items.map(x => x.cat).filter(Boolean)));
+    const needle = q.trim().toLowerCase();
+    const filtered = items.filter(it => {
+      if (statusF && (statusF === 'A' ? it.status !== 'A' : it.status === 'A')) return false;
+      if (catF && it.cat !== catF) return false;
+      if (needle) { const hay = (it.code + ' ' + (it.nameTh || '') + ' ' + (it.name || '') + ' ' + (it.cat || '')).toLowerCase(); if (hay.indexOf(needle) < 0) return false; }
+      return true;
+    });
+
+    function toggleStatus(it) {
+      setState(prev => ({ ...prev, [key]: prev[key].map(x => x.code === it.code ? { ...x, status: x.status === 'A' ? 'I' : 'A' } : x) }));
+      toast(it.status === 'A' ? (lang === 'th' ? 'ปิดใช้งานแล้ว' : 'Set inactive') : (lang === 'th' ? 'เปิดใช้งานแล้ว' : 'Set active'), 'warn');
+    }
 
     function save(f) {
       if (modal.mode === 'add' && items.some(x => x.code === f.code.trim())) {
@@ -21,12 +54,12 @@
       }
       setState(prev => {
         const list = prev[key].slice();
-        const rec = { name: f.name || f.nameTh, nameTh: f.nameTh || f.name, unit: f.unit, cat: f.cat };
+        const rec = { name: f.name || f.nameTh, nameTh: f.nameTh || f.name, unit: f.unit, cat: f.cat, status: f.status || 'A' };
         if (modal.mode === 'edit') {
           const i = list.findIndex(x => x.code === modal.item.code);
           if (i !== -1) list[i] = { ...list[i], ...rec };
         } else {
-          list.push({ code: f.code.trim(), status: 'A', ...rec });
+          list.push({ code: f.code.trim(), ...rec });
         }
         return { ...prev, [key]: list };
       });
@@ -53,24 +86,26 @@
       React.createElement(PageHead, { title: t('nav.items'), sub: t('navsec.master'),
         actions: React.createElement('div', { className: 'row', style: { gap: 10 } },
           React.createElement('div', { className: 'pill-tabs' },
-            React.createElement('button', { className: tab === 'rm' ? 'on' : '', onClick: () => setTab('rm') }, t('rawmat')),
-            React.createElement('button', { className: tab === 'fg' ? 'on' : '', onClick: () => setTab('fg') }, t('finished'))),
+            React.createElement('button', { className: tab === 'rm' ? 'on' : '', onClick: () => switchTab('rm') }, t('rawmat')),
+            React.createElement('button', { className: tab === 'fg' ? 'on' : '', onClick: () => switchTab('fg') }, t('finished'))),
           React.createElement('button', { className: 'btn btn-pri', onClick: () => setModal({ mode: 'add' }) }, React.createElement(Icon, { name: 'plus', size: 15 }), t('btn.new'))) }),
+      React.createElement(ItemFilterBar, { lang, q, setQ, catF, setCatF, statusF, setStatusF, cats, count: filtered.length, total: items.length }),
       React.createElement('div', { className: 'card' },
         React.createElement('table', { className: 'tbl' },
           React.createElement('thead', null, React.createElement('tr', null,
             React.createElement('th', null, tab === 'rm' ? 'RM ' + t('f.code') : 'FG ' + t('f.code')),
             React.createElement('th', null, t('f.name')), React.createElement('th', null, t('f.unit')), React.createElement('th', null, t('f.category')), React.createElement('th', null, t('f.status')),
-            React.createElement('th', { style: { width: 90 } }, ''))),
-          React.createElement('tbody', null, items.length === 0
+            React.createElement('th', { style: { width: 120 } }, ''))),
+          React.createElement('tbody', null, filtered.length === 0
             ? React.createElement('tr', null, React.createElement('td', { colSpan: 6, className: 'empty' }, t('tbl.noresults')))
-            : items.map(it => React.createElement('tr', { key: it.code },
+            : filtered.map(it => React.createElement('tr', { key: it.code, style: { opacity: it.status === 'A' ? 1 : 0.55 } },
             React.createElement('td', { className: 'mono', style: { fontWeight: 600, color: 'var(--primary)' } }, it.code),
             React.createElement('td', null, React.createElement('div', { style: { fontWeight: 600 } }, lang === 'th' ? it.nameTh : it.name), React.createElement('div', { className: 'faint', style: { fontSize: 10.5 } }, lang === 'th' ? it.name : it.nameTh)),
             React.createElement('td', { className: 'mono' }, it.unit),
             React.createElement('td', null, React.createElement('span', { className: 'badge badge-soft' }, it.cat)),
             React.createElement('td', null, React.createElement('span', { className: 'badge', style: { color: it.status === 'A' ? 'var(--ok)' : 'var(--text-muted)', background: it.status === 'A' ? 'var(--ok-tint)' : 'var(--surface-3)' } }, it.status === 'A' ? t('f.active') : t('f.inactive'))),
             React.createElement('td', { className: 'num' }, React.createElement('div', { className: 'row', style: { gap: 4, justifyContent: 'flex-end' } },
+              React.createElement('button', { className: 'btn btn-sm', title: it.status === 'A' ? t('f.inactive') : t('f.active'), onClick: () => toggleStatus(it) }, it.status === 'A' ? t('f.inactive') : t('f.active')),
               React.createElement('button', { className: 'btn btn-sm btn-ghost btn-icon', title: t('btn.edit'), onClick: () => setModal({ mode: 'edit', item: it }) }, React.createElement(Icon, { name: 'edit', size: 13 })),
               canDelete && React.createElement('button', { className: 'btn btn-sm btn-ghost btn-icon', title: t('btn.delete'), onClick: () => del(it) }, React.createElement(Icon, { name: 'trash', size: 13, style: { color: 'var(--danger)' } })))))))) ),
       modal && React.createElement(ItemModal, { tab, t, lang, edit: modal.mode === 'edit' ? modal.item : null, onClose: () => setModal(null), onSubmit: save }));
@@ -78,8 +113,8 @@
 
   function ItemModal({ tab, t, lang, edit, onClose, onSubmit }) {
     const [f, setF] = React.useState(edit
-      ? { code: edit.code, name: edit.name, nameTh: edit.nameTh, unit: edit.unit, cat: edit.cat }
-      : { code: '', name: '', nameTh: '', unit: 'pcs', cat: '' });
+      ? { code: edit.code, name: edit.name, nameTh: edit.nameTh, unit: edit.unit, cat: edit.cat, status: edit.status || 'A' }
+      : { code: '', name: '', nameTh: '', unit: 'pcs', cat: '', status: 'A' });
     const set = (k, v) => setF(p => ({ ...p, [k]: v }));
     return React.createElement(Modal, { title: (edit ? t('btn.edit') : t('btn.new')) + ' · ' + (tab === 'rm' ? t('rawmat') : t('finished')), onClose, width: 480,
       footer: React.createElement(React.Fragment, null, React.createElement('button', { className: 'btn', onClick: onClose }, t('btn.cancel')),
@@ -89,7 +124,10 @@
         React.createElement(Field, { label: t('f.unit'), required: true }, React.createElement('select', { className: 'select', value: f.unit, onChange: e => set('unit', e.target.value) }, ['pcs', 'kg', 'g', 'L', 'ml'].map(u => React.createElement('option', { key: u }, u)))),
         React.createElement('div', { style: { gridColumn: 'span 2' } }, React.createElement(Field, { label: (lang === 'th' ? 'ชื่อ (ไทย)' : 'Name (Thai)'), required: true }, React.createElement('input', { className: 'input', value: f.nameTh, onChange: e => set('nameTh', e.target.value) }))),
         React.createElement('div', { style: { gridColumn: 'span 2' } }, React.createElement(Field, { label: (lang === 'th' ? 'ชื่อ (อังกฤษ)' : 'Name (English)') }, React.createElement('input', { className: 'input', value: f.name, onChange: e => set('name', e.target.value) }))),
-        React.createElement('div', { style: { gridColumn: 'span 2' } }, React.createElement(Field, { label: t('f.category') }, React.createElement('input', { className: 'input', value: f.cat, onChange: e => set('cat', e.target.value), placeholder: tab === 'rm' ? 'Active / Base / Packaging' : 'Serum / Foundation / Lip' })))));
+        React.createElement(Field, { label: t('f.category') }, React.createElement('input', { className: 'input', value: f.cat, onChange: e => set('cat', e.target.value), placeholder: tab === 'rm' ? 'Active / Base / Packaging' : 'Serum / Foundation / Lip' })),
+        React.createElement(Field, { label: t('f.status') }, React.createElement('select', { className: 'select', value: f.status, onChange: e => set('status', e.target.value) },
+          React.createElement('option', { value: 'A' }, t('f.active')),
+          React.createElement('option', { value: 'I' }, t('f.inactive'))))));
   }
 
   /* ---------------- BOM Management ---------------- */

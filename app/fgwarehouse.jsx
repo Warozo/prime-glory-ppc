@@ -133,17 +133,44 @@
     const [wh, setWh] = React.useState('rm');
     const [open, setOpen] = React.useState({}); // expanded RM code → show its in-stock lots
     const rmAgg = state.raw.map(r => ({ ...r, onHand: D.rmOnHand(state, r.code), reserved: D.rmReserved(state, r.code), available: D.rmAvailable(state, r.code), lots: state.lots.filter(l => l.rm === r.code && l.remaining > 0).length }));
+    const [q, setQ] = React.useState('');
+    const [catF, setCatF] = React.useState('');
+    const [statusF, setStatusF] = React.useState('');
+    const switchWh = (w) => { setWh(w); setQ(''); setCatF(''); setStatusF(''); };
+    const needle = q.trim().toLowerCase();
+    const matchItem = (code, nameTh, name, cat, status) => {
+      if (statusF && (statusF === 'A' ? status !== 'A' : status === 'A')) return false;
+      if (catF && cat !== catF) return false;
+      if (needle) { const hay = (code + ' ' + (nameTh || '') + ' ' + (name || '') + ' ' + (cat || '')).toLowerCase(); if (hay.indexOf(needle) < 0) return false; }
+      return true;
+    };
+    const rmFiltered = rmAgg.filter(r => matchItem(r.code, r.nameTh, r.name, r.cat, r.status || 'A'));
+    const fgFiltered = (state.fgStock || []).filter(x => { const p = state.fg.find(g => g.code === x.fg) || {}; return matchItem(p.code || x.fg, p.nameTh, p.name, p.cat, p.status || 'A'); });
+    const cats = Array.from(new Set((wh === 'rm' ? state.raw : state.fg).map(x => x.cat).filter(Boolean)));
+    const totalRows = wh === 'rm' ? rmAgg.length : (state.fgStock || []).length;
+    const shownRows = wh === 'rm' ? rmFiltered.length : fgFiltered.length;
 
     return React.createElement('div', null,
       React.createElement(PageHead, { title: t('nav.stock'), sub: t('navsec.warehouse'),
         actions: React.createElement('div', { className: 'pill-tabs' },
-          React.createElement('button', { className: wh === 'rm' ? 'on' : '', onClick: () => setWh('rm') }, t('rawmat')),
-          React.createElement('button', { className: wh === 'fg' ? 'on' : '', onClick: () => setWh('fg') }, t('finished'))) }),
+          React.createElement('button', { className: wh === 'rm' ? 'on' : '', onClick: () => switchWh('rm') }, t('rawmat')),
+          React.createElement('button', { className: wh === 'fg' ? 'on' : '', onClick: () => switchWh('fg') }, t('finished'))) }),
+      React.createElement('div', { className: 'card', style: { marginBottom: 'var(--gap)', padding: 12 } },
+        React.createElement('div', { className: 'row', style: { gap: 10, flexWrap: 'wrap', alignItems: 'center' } },
+          React.createElement('input', { className: 'input', style: { flex: '1 1 220px', minWidth: 180 }, placeholder: lang === 'th' ? 'ค้นหา รหัส / ชื่อ' : 'Search code / name', value: q, onChange: ev => setQ(ev.target.value) }),
+          React.createElement('select', { className: 'select', style: { width: 168 }, value: catF, onChange: ev => setCatF(ev.target.value) },
+            [React.createElement('option', { key: '_all', value: '' }, lang === 'th' ? 'ทุกหมวดหมู่' : 'All categories')].concat(cats.map(c => React.createElement('option', { key: c, value: c }, c)))),
+          React.createElement('select', { className: 'select', style: { width: 150 }, value: statusF, onChange: ev => setStatusF(ev.target.value) },
+            React.createElement('option', { value: '' }, lang === 'th' ? 'ทุกสถานะ' : 'All statuses'),
+            React.createElement('option', { value: 'A' }, lang === 'th' ? 'ใช้งาน' : 'Active'),
+            React.createElement('option', { value: 'I' }, lang === 'th' ? 'ปิดใช้งาน' : 'Inactive')),
+          React.createElement('span', { className: 'badge badge-soft', style: { fontSize: 11 } }, shownRows + ' / ' + totalRows),
+          (q || catF || statusF) && React.createElement('button', { className: 'btn btn-sm', onClick: () => { setQ(''); setCatF(''); setStatusF(''); } }, lang === 'th' ? 'ล้าง' : 'Clear'))),
       wh === 'rm' ? React.createElement('div', { className: 'card' },
         React.createElement('div', { className: 'card-h' }, React.createElement(Icon, { name: 'warehouse', size: 15, style: { color: 'var(--primary)' } }), React.createElement('h3', null, lang === 'th' ? 'คลังวัตถุดิบ' : 'Raw Material Warehouse')),
         React.createElement('table', { className: 'tbl' },
           React.createElement('thead', null, React.createElement('tr', null, React.createElement('th', null, t('f.code')), React.createElement('th', null, t('f.name')), React.createElement('th', null, t('f.category')), React.createElement('th', { className: 'num' }, t('f.onhand')), React.createElement('th', { className: 'num' }, t('f.reserved')), React.createElement('th', { className: 'num' }, t('f.available')), React.createElement('th', { className: 'num' }, t('wh.batches')), React.createElement('th', null, t('f.status')))),
-          React.createElement('tbody', null, rmAgg.map(r => {
+          React.createElement('tbody', null, rmFiltered.map(r => {
             const isOpen = !!open[r.code];
             const lots = state.lots.filter(l => l.rm === r.code && l.remaining > 0).sort((a, b) => new Date(a.expiry) - new Date(b.expiry));
             const mainRow = React.createElement('tr', { key: r.code, className: 'clickrow', style: { cursor: 'pointer' }, onClick: () => setOpen(o => ({ ...o, [r.code]: !o[r.code] })) },
@@ -155,7 +182,7 @@
               React.createElement('td', { className: 'num mono', style: { color: r.reserved > 0 ? 'var(--warn)' : 'var(--text-faint)' } }, r.reserved > 0 ? fmt(r.reserved) : '–'),
               React.createElement('td', { className: 'num mono', style: { fontWeight: 600, color: r.available <= 0 ? 'var(--danger)' : 'var(--ok)' } }, fmt(r.available)),
               React.createElement('td', { className: 'num mono' }, React.createElement('span', { className: 'badge badge-soft' }, r.lots)),
-              React.createElement('td', null, React.createElement('span', { className: 'badge', style: { color: 'var(--ok)', background: 'var(--ok-tint)' } }, '✓ ' + t('f.active'))));
+              React.createElement('td', null, React.createElement('span', { className: 'badge', style: { color: (r.status || 'A') === 'A' ? 'var(--ok)' : 'var(--text-muted)', background: (r.status || 'A') === 'A' ? 'var(--ok-tint)' : 'var(--surface-3)' } }, (r.status || 'A') === 'A' ? '✓ ' + t('f.active') : t('f.inactive'))));
             const detailRow = isOpen ? React.createElement('tr', { key: r.code + '_d' },
               React.createElement('td', { colSpan: 8, style: { background: 'var(--surface-2)', padding: 0 } },
                 lots.length === 0
@@ -182,7 +209,7 @@
         React.createElement('div', { className: 'card-h' }, React.createElement(Icon, { name: 'fg', size: 15, style: { color: 'var(--primary)' } }), React.createElement('h3', null, lang === 'th' ? 'คลังสินค้าสำเร็จรูป' : 'Finished Good Warehouse')),
         React.createElement('table', { className: 'tbl' },
           React.createElement('thead', null, React.createElement('tr', null, React.createElement('th', null, t('f.product')), React.createElement('th', null, t('f.lot')), React.createElement('th', { className: 'num' }, t('f.qty')), React.createElement('th', null, t('f.expiry')))),
-          React.createElement('tbody', null, state.fgStock.map((x, i) => React.createElement('tr', { key: i },
+          React.createElement('tbody', null, fgFiltered.map((x, i) => React.createElement('tr', { key: i },
             React.createElement('td', { style: { fontWeight: 600 } }, D.fgName(state, x.fg, lang)),
             React.createElement('td', { className: 'mono' }, x.lot),
             React.createElement('td', { className: 'num mono', style: { fontWeight: 600 } }, fmt(x.qty)),
