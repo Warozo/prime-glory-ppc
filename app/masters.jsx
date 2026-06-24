@@ -390,7 +390,7 @@
       const np = Math.random().toString(36).slice(2, 8);
       const r = await D.adminUser('setPassword', { email: D.emailFor(u), password: np });
       if (!r.ok) { efail(r.error); return; }
-      setState(prev => ({ ...prev, users: prev.users.map(x => x.id === u.id ? { ...x, password: np } : x) }));
+      // password lives only in Supabase Auth now — not stored in app_state
       toast((lang === 'th' ? 'รหัสผ่านใหม่: ' : 'New password: ') + np);
     }
     async function save(f) {
@@ -411,7 +411,7 @@
         const r = await D.adminUser('update', { oldEmail: D.emailFor(modal.user), email: newEmail, password: f.password || undefined, meta: { username: uname, name: f.name, app_id: modal.user.id, role: role } });
         if (!r.ok) { efail(r.error); return; }
         setState(prev => ({ ...prev, users: prev.users.map(u => u.id === modal.user.id
-          ? { ...u, name: f.name, username: uname, email: f.email, role, perms, password: f.password ? f.password : u.password } : u) }));
+          ? { ...u, name: f.name, username: uname, email: f.email, role, perms } : u) }));
         toast(t('toast.saved')); setModal(null); return;
       }
       const nums = state.users.map(x => parseInt((x.id || '').replace(/\D/g, ''), 10)).filter(n => !isNaN(n));
@@ -419,7 +419,7 @@
       const email = D.emailFor({ email: f.email, username: uname });
       const r = await D.adminUser('create', { email: email, password: f.password, meta: { username: uname, name: f.name, app_id: id, role: role } });
       if (!r.ok) { efail(r.error); return; }
-      setState(prev => ({ ...prev, users: [...prev.users, { id, username: uname, name: f.name, email: f.email, role, perms, status: 'A', last: prev.today, password: f.password }] }));
+      setState(prev => ({ ...prev, users: [...prev.users, { id, username: uname, name: f.name, email: f.email, role, perms, status: 'A', last: prev.today }] }));
       toast(t('toast.usercreated')); setModal(null);
     }
     async function del(u) {
