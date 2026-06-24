@@ -77,10 +77,13 @@
       let users;
       try { const st = await window.PG_DATA.loadState(); users = (st && st.users) || []; }
       catch (e) { users = window.PG_DATA.buildState().users; }
-      setBusy(false);
       const found = users.find(x => x.username === u.trim() && x.password === p);
-      if (!found) { setErr(lang === 'th' ? 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' : 'Invalid username or password'); return; }
-      if (found.status !== 'A') { setErr(lang === 'th' ? 'บัญชีถูกปิดใช้งาน' : 'Account is inactive'); return; }
+      if (!found) { setBusy(false); setErr(lang === 'th' ? 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' : 'Invalid username or password'); return; }
+      if (found.status !== 'A') { setBusy(false); setErr(lang === 'th' ? 'บัญชีถูกปิดใช้งาน' : 'Account is inactive'); return; }
+      // Best-effort: establish a Supabase Auth session (carries a JWT for upcoming DB-level
+      // security). While RLS is still open this is optional, so a failure must not block login.
+      try { await window.PG_DATA.signIn(window.PG_DATA.emailFor(found), p); } catch (e) { /* ignore */ }
+      setBusy(false);
       onLogin(found);
     };
     return React.createElement('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', height: '100%' } },
@@ -232,7 +235,7 @@
       const m = { username: user.username, name: user.name, role: user.role, perms: Array.isArray(user.perms) ? user.perms : null };
       setMe(m); localStorage.setItem('pg_user', JSON.stringify(m));
     };
-    const logout = () => { setMe(null); localStorage.removeItem('pg_user'); localStorage.removeItem('pg_auth'); };
+    const logout = () => { try { window.PG_DATA.signOut(); } catch (e) {} setMe(null); localStorage.removeItem('pg_user'); localStorage.removeItem('pg_auth'); };
 
     return React.createElement(I18nContext.Provider, { value: { lang, t } },
       React.createElement(ToastProvider, null,

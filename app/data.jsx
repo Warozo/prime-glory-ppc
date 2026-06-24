@@ -270,6 +270,22 @@
 
   function fgOnHand(s, code) { return s.fgStock.filter(x => x.fg === code).reduce((a, x) => a + x.qty, 0); }
 
+  /* ---- Supabase Auth (must match the auth-admin edge function's email mapping) ---- */
+  // Derive the auth email for a user record: real email if set, else <username>@primglory.local.
+  function emailFor(u) {
+    if (!u) return '';
+    const e = (u.email || '').trim();
+    if (e) return e.toLowerCase();
+    const base = String(u.username || u.id || 'user').toLowerCase().replace(/[^a-z0-9._-]/g, '');
+    return base + '@primglory.local';
+  }
+  async function signIn(email, password) {
+    if (!_supa || !_supa.auth) return { ok: false };
+    try { const { data, error } = await _supa.auth.signInWithPassword({ email: email, password: password }); if (error) return { ok: false, error: error.message }; return { ok: true, session: data && data.session }; }
+    catch (e) { return { ok: false, error: String(e) }; }
+  }
+  async function signOut() { if (_supa && _supa.auth) { try { await _supa.auth.signOut(); } catch (e) { /* ignore */ } } }
+
   /* ---- Persistence: whole-state snapshot in Supabase (id='main') ---- */
   // Best-effort backup of the current state into app_state_v1_snapshot before a
   // destructive admin action. Returns the snapshot label, or false if it failed.
@@ -328,5 +344,5 @@
     return function () { try { _supa.removeChannel(ch); } catch (e) {} };
   }
 
-  window.PG_DATA = { buildState, loadState, saveState, subscribe, snapshotState, genId, fgName, rmName, rmOnHand, rmLotsFEFO, rmReserved, rmAvailable, rmUnit, fgOnHand, bomRequirement, workflowForLine, buildWipLot, orderProgress, STEP_LIB, PROC_STATUS };
+  window.PG_DATA = { buildState, loadState, saveState, subscribe, snapshotState, emailFor, signIn, signOut, genId, fgName, rmName, rmOnHand, rmLotsFEFO, rmReserved, rmAvailable, rmUnit, fgOnHand, bomRequirement, workflowForLine, buildWipLot, orderProgress, STEP_LIB, PROC_STATUS };
 })();
