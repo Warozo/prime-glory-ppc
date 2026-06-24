@@ -445,7 +445,7 @@
               React.createElement('span', { style: { width: 28, height: 28, borderRadius: '50%', background: ROLE_COLOR[u.role] || '#2d5bd7', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 700 } }, u.name.split(' ').map(x => x[0]).join('').slice(0, 2)),
               React.createElement('span', { style: { fontWeight: 600 } }, u.name))),
             React.createElement('td', { className: 'mono' }, u.username),
-            React.createElement('td', null, React.createElement(PwCell, { pw: u.password || '\u2014' })),
+            React.createElement('td', null, React.createElement('span', { className: 'faint', style: { display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11.5 }, title: lang === 'th' ? '\u0e23\u0e2b\u0e31\u0e2a\u0e1c\u0e48\u0e32\u0e19\u0e40\u0e01\u0e47\u0e1a\u0e2d\u0e22\u0e48\u0e32\u0e07\u0e1b\u0e25\u0e2d\u0e14\u0e20\u0e31\u0e22\u0e43\u0e19 Supabase Auth \u2014 \u0e43\u0e0a\u0e49\u0e1b\u0e38\u0e48\u0e21\u0e01\u0e38\u0e0d\u0e41\u0e08\u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e23\u0e35\u0e40\u0e0b\u0e47\u0e15' : 'Password is stored securely in Supabase Auth \u2014 use the key button to reset' }, React.createElement(Icon, { name: 'lock', size: 11 }), 'Supabase Auth')),
             React.createElement('td', { className: 'faint' }, u.email),
             React.createElement('td', null, u.role === 'admin'
               ? React.createElement('span', { className: 'badge', style: { color: 'var(--danger)', background: 'var(--danger-tint)' } }, lang === 'th' ? 'ผู้ดูแลระบบ (สิทธิ์เต็ม)' : 'Admin (full)')

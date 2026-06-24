@@ -77,13 +77,14 @@
       let users;
       try { const st = await window.PG_DATA.loadState(); users = (st && st.users) || []; }
       catch (e) { users = window.PG_DATA.buildState().users; }
-      const found = users.find(x => x.username === u.trim() && x.password === p);
+      const found = users.find(x => x.username === u.trim());
       if (!found) { setBusy(false); setErr(lang === 'th' ? 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' : 'Invalid username or password'); return; }
       if (found.status !== 'A') { setBusy(false); setErr(lang === 'th' ? 'บัญชีถูกปิดใช้งาน' : 'Account is inactive'); return; }
-      // Best-effort: establish a Supabase Auth session (carries a JWT for upcoming DB-level
-      // security). While RLS is still open this is optional, so a failure must not block login.
-      try { await window.PG_DATA.signIn(window.PG_DATA.emailFor(found), p); } catch (e) { /* ignore */ }
+      // Supabase Auth is the source of truth for credentials (no plaintext password is stored).
+      // A valid sign-in also establishes the session whose JWT the RLS policies require.
+      const auth = await window.PG_DATA.signIn(window.PG_DATA.emailFor(found), p);
       setBusy(false);
+      if (!auth || !auth.ok) { setErr(lang === 'th' ? 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' : 'Invalid username or password'); return; }
       onLogin(found);
     };
     return React.createElement('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', height: '100%' } },
