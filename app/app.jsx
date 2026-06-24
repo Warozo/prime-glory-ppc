@@ -72,19 +72,19 @@
     const submit = async () => {
       if (busy) return;
       setBusy(true); setErr('');
-      // Authenticate against the live shared snapshot (so users added later
-      // via User Management can sign in), falling back to the seed offline.
-      let users;
-      try { const st = await window.PG_DATA.loadState(); users = (st && st.users) || []; }
-      catch (e) { users = window.PG_DATA.buildState().users; }
-      const found = users.find(x => x.username === u.trim());
-      if (!found) { setBusy(false); setErr(lang === 'th' ? 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' : 'Invalid username or password'); return; }
-      if (found.status !== 'A') { setBusy(false); setErr(lang === 'th' ? 'บัญชีถูกปิดใช้งาน' : 'Account is inactive'); return; }
-      // Supabase Auth is the source of truth for credentials (no plaintext password is stored).
-      // A valid sign-in also establishes the session whose JWT the RLS policies require.
-      const auth = await window.PG_DATA.signIn(window.PG_DATA.emailFor(found), p);
+      const uname = u.trim();
+      const invalid = lang === 'th' ? 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' : 'Invalid username or password';
+      if (!uname) { setBusy(false); setErr(invalid); return; }
+      // Supabase Auth is the gate. The auth email is derived from the username, so we can
+      // authenticate WITHOUT reading the database first (RLS blocks anon reads). Only after a
+      // valid session do we load the profile (perms, name, status).
+      const auth = await window.PG_DATA.signIn(window.PG_DATA.emailFor(uname), p);
+      if (!auth || !auth.ok) { setBusy(false); setErr(invalid); return; }
+      let found = null;
+      try { const st = await window.PG_DATA.loadState(); found = ((st && st.users) || []).find(x => x.username === uname); } catch (e) { /* ignore */ }
       setBusy(false);
-      if (!auth || !auth.ok) { setErr(lang === 'th' ? 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' : 'Invalid username or password'); return; }
+      if (!found) { try { window.PG_DATA.signOut(); } catch (e) {} setErr(invalid); return; }
+      if (found.status !== 'A') { try { window.PG_DATA.signOut(); } catch (e) {} setErr(lang === 'th' ? 'บัญชีถูกปิดใช้งาน' : 'Account is inactive'); return; }
       onLogin(found);
     };
     return React.createElement('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', height: '100%' } },

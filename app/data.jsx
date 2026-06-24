@@ -271,12 +271,12 @@
   function fgOnHand(s, code) { return s.fgStock.filter(x => x.fg === code).reduce((a, x) => a + x.qty, 0); }
 
   /* ---- Supabase Auth (must match the auth-admin edge function's email mapping) ---- */
-  // Derive the auth email for a user record: real email if set, else <username>@primglory.local.
+  // Derive the auth email from a username (or user record). Always synthetic & deterministic
+  // so login can compute it without reading the database. The `email` field is contact info only.
   function emailFor(u) {
     if (!u) return '';
-    const e = (u.email || '').trim();
-    if (e) return e.toLowerCase();
-    const base = String(u.username || u.id || 'user').toLowerCase().replace(/[^a-z0-9._-]/g, '');
+    const name = typeof u === 'string' ? u : (u.username || u.id);
+    const base = String(name || 'user').toLowerCase().replace(/[^a-z0-9._-]/g, '');
     return base + '@primglory.local';
   }
   async function signIn(email, password) {
