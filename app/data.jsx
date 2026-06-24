@@ -285,6 +285,21 @@
     catch (e) { return { ok: false, error: String(e) }; }
   }
   async function signOut() { if (_supa && _supa.auth) { try { await _supa.auth.signOut(); } catch (e) { /* ignore */ } } }
+  // Call the auth-admin edge function (keeps Supabase Auth users in sync with the app's
+  // user list). The current Supabase session JWT is attached automatically by invoke().
+  async function adminUser(action, payload) {
+    if (!_supa || !_supa.functions) return { ok: false, error: 'no client' };
+    try {
+      const { data, error } = await _supa.functions.invoke('auth-admin', { body: Object.assign({ action: action }, payload || {}) });
+      if (error) {
+        let msg = error.message || String(error);
+        try { const ctx = error.context && error.context.json ? await error.context.json() : null; if (ctx && ctx.error) msg = ctx.error; } catch (e) { /* ignore */ }
+        return { ok: false, error: msg };
+      }
+      if (data && data.error) return { ok: false, error: data.error };
+      return { ok: true, data: data };
+    } catch (e) { return { ok: false, error: String(e) }; }
+  }
 
   /* ---- Persistence: whole-state snapshot in Supabase (id='main') ---- */
   // Best-effort backup of the current state into app_state_v1_snapshot before a
@@ -344,5 +359,5 @@
     return function () { try { _supa.removeChannel(ch); } catch (e) {} };
   }
 
-  window.PG_DATA = { buildState, loadState, saveState, subscribe, snapshotState, emailFor, signIn, signOut, genId, fgName, rmName, rmOnHand, rmLotsFEFO, rmReserved, rmAvailable, rmUnit, fgOnHand, bomRequirement, workflowForLine, buildWipLot, orderProgress, STEP_LIB, PROC_STATUS };
+  window.PG_DATA = { buildState, loadState, saveState, subscribe, snapshotState, emailFor, signIn, signOut, adminUser, genId, fgName, rmName, rmOnHand, rmLotsFEFO, rmReserved, rmAvailable, rmUnit, fgOnHand, bomRequirement, workflowForLine, buildWipLot, orderProgress, STEP_LIB, PROC_STATUS };
 })();

@@ -377,13 +377,23 @@
     const LEGACY = { ppc: ALL_KEYS.filter(k => k !== 'users'), management: ALL_KEYS.filter(k => k !== 'users'), warehouse: ['receiving', 'issue', 'fgreceiving', 'fgsales', 'stock'], production: ['dashboard', 'schedule', 'designer', 'shopfloor', 'qa'] };
     const permCount = (u) => u.role === 'admin' ? ALL_KEYS.length : (Array.isArray(u.perms) ? u.perms.length : (LEGACY[u.role] || []).length);
 
-    function toggle(id) { setState(prev => ({ ...prev, users: prev.users.map(u => u.id === id ? { ...u, status: u.status === 'A' ? 'I' : 'A' } : u) })); toast(t('toast.saved')); }
-    function resetPw(u) {
+    const D = window.PG_DATA;
+    const efail = (msg) => toast((lang === 'th' ? 'ซิงก์บัญชีล็อกอินไม่สำเร็จ: ' : 'Auth sync failed: ') + msg, 'warn');
+    async function toggle(id) {
+      const u = state.users.find(x => x.id === id); if (!u) return;
+      const next = u.status === 'A' ? 'I' : 'A';
+      const r = await D.adminUser('setBanned', { email: D.emailFor(u), banned: next === 'I' });
+      if (!r.ok) { efail(r.error); return; }
+      setState(prev => ({ ...prev, users: prev.users.map(x => x.id === id ? { ...x, status: next } : x) })); toast(t('toast.saved'));
+    }
+    async function resetPw(u) {
       const np = Math.random().toString(36).slice(2, 8);
+      const r = await D.adminUser('setPassword', { email: D.emailFor(u), password: np });
+      if (!r.ok) { efail(r.error); return; }
       setState(prev => ({ ...prev, users: prev.users.map(x => x.id === u.id ? { ...x, password: np } : x) }));
       toast((lang === 'th' ? 'รหัสผ่านใหม่: ' : 'New password: ') + np);
     }
-    function save(f) {
+    async function save(f) {
       const uname = f.username.trim();
       const isEdit = modal.mode === 'edit';
       if (state.users.some(u => u.username === uname && (!isEdit || u.id !== modal.user.id))) {
@@ -396,21 +406,28 @@
         const activeAdmins = state.users.filter(x => x.role === 'admin' && x.status === 'A');
         if (activeAdmins.length <= 1) { toast(lang === 'th' ? 'ต้องมีผู้ดูแลระบบ (สิทธิ์เต็ม) อย่างน้อย 1 คน' : 'Keep at least one Admin (full access)', 'warn'); return; }
       }
-      setState(prev => {
-        if (isEdit) {
-          return { ...prev, users: prev.users.map(u => u.id === modal.user.id
-            ? { ...u, name: f.name, username: uname, email: f.email, role, perms, password: f.password ? f.password : u.password } : u) };
-        }
-        const nums = prev.users.map(x => parseInt((x.id || '').replace(/\D/g, ''), 10)).filter(n => !isNaN(n));
-        const id = 'U' + String((nums.length ? Math.max.apply(null, nums) : 0) + 1).padStart(2, '0');
-        return { ...prev, users: [...prev.users, { id, username: uname, name: f.name, email: f.email, role, perms, status: 'A', last: prev.today, password: f.password }] };
-      });
-      toast(isEdit ? t('toast.saved') : t('toast.usercreated')); setModal(null);
+      if (isEdit) {
+        const newEmail = D.emailFor({ email: f.email, username: uname });
+        const r = await D.adminUser('update', { oldEmail: D.emailFor(modal.user), email: newEmail, password: f.password || undefined, meta: { username: uname, name: f.name, app_id: modal.user.id, role: role } });
+        if (!r.ok) { efail(r.error); return; }
+        setState(prev => ({ ...prev, users: prev.users.map(u => u.id === modal.user.id
+          ? { ...u, name: f.name, username: uname, email: f.email, role, perms, password: f.password ? f.password : u.password } : u) }));
+        toast(t('toast.saved')); setModal(null); return;
+      }
+      const nums = state.users.map(x => parseInt((x.id || '').replace(/\D/g, ''), 10)).filter(n => !isNaN(n));
+      const id = 'U' + String((nums.length ? Math.max.apply(null, nums) : 0) + 1).padStart(2, '0');
+      const email = D.emailFor({ email: f.email, username: uname });
+      const r = await D.adminUser('create', { email: email, password: f.password, meta: { username: uname, name: f.name, app_id: id, role: role } });
+      if (!r.ok) { efail(r.error); return; }
+      setState(prev => ({ ...prev, users: [...prev.users, { id, username: uname, name: f.name, email: f.email, role, perms, status: 'A', last: prev.today, password: f.password }] }));
+      toast(t('toast.usercreated')); setModal(null);
     }
-    function del(u) {
+    async function del(u) {
       const activeAdmins = state.users.filter(x => x.role === 'admin' && x.status === 'A');
       if (u.role === 'admin' && activeAdmins.length <= 1) { toast(lang === 'th' ? 'ลบไม่ได้ — ต้องมีผู้ดูแลระบบที่ใช้งานอย่างน้อย 1 คน' : 'Cannot delete — keep at least one active admin', 'warn'); return; }
       if (!window.confirm((lang === 'th' ? 'ยืนยันลบผู้ใช้ ' : 'Delete user ') + u.username + ' ?')) return;
+      const r = await D.adminUser('delete', { email: D.emailFor(u) });
+      if (!r.ok) { efail(r.error); return; }
       setState(prev => ({ ...prev, users: prev.users.filter(x => x.id !== u.id) }));
       toast(lang === 'th' ? 'ลบผู้ใช้เรียบร้อย' : 'User deleted', 'warn');
     }
