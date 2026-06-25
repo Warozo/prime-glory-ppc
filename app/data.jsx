@@ -321,43 +321,66 @@
   async function loadState() {
     if (!_supa) return buildState();
     try {
-      const { data, error } = await _supa.from('app_state').select('data').eq('id', 'main').maybeSingle();
+      const { data, error } = await _supa.from('app_state').select('data, version').eq('id', 'main').maybeSingle();
       if (error) { console.warn('loadState:', error.message); return buildState(); }
       if (!data) {
         const seed = buildState();
-        await _supa.from('app_state').upsert({ id: 'main', data: seed, client_id: CLIENT_ID, updated_at: new Date().toISOString() });
+        await _supa.from('app_state').upsert({ id: 'main', data: seed, client_id: CLIENT_ID, updated_at: new Date().toISOString(), version: 0 });
+        _baseVersion = 0;
         return seed;
       }
+      _baseVersion = (typeof data.version === 'number') ? data.version : 0;
       const st = data.data; st.today = d(0); seedSeq(st); ensureSids(st); return st;
     } catch (e) { console.warn('loadState error:', e); return buildState(); }
   }
 
-  // Debounced upsert of the full snapshot. Tagged with CLIENT_ID so this tab
-  // can ignore the realtime echo of its own write.
-  let _saveTimer = null, _pending = null;
+  // Debounced, optimistically-locked save of the full snapshot. We only overwrite the row
+  // when its version still matches the one we loaded (_baseVersion); otherwise another tab/user
+  // saved first and we must not clobber them — we reload their state and warn instead.
+  // CLIENT_ID lets this tab ignore the realtime echo of its own write.
+  let _saveTimer = null, _pending = null, _baseVersion = 0, _onSaveStatus = null, _onRemote = null;
+  function onSaveStatus(cb) { _onSaveStatus = cb; }
+  function _emitSave(status, detail) { if (_onSaveStatus) { try { _onSaveStatus(status, detail); } catch (e) { /* ignore */ } } }
+  function _applyRemote(st, ver) { if (typeof ver === 'number') _baseVersion = ver; st.today = d(0); seedSeq(st); ensureSids(st); if (_onRemote) _onRemote(st); }
   function saveState(state) {
     if (!_supa) return;
     _pending = state;
     clearTimeout(_saveTimer);
-    _saveTimer = setTimeout(() => {
-      _supa.from('app_state')
-        .upsert({ id: 'main', data: _pending, client_id: CLIENT_ID, updated_at: new Date().toISOString() })
-        .then(({ error }) => { if (error) console.warn('saveState:', error.message); });
+    _saveTimer = setTimeout(async () => {
+      const payload = _pending, expected = _baseVersion;
+      try {
+        const { data, error } = await _supa.from('app_state')
+          .update({ data: payload, client_id: CLIENT_ID, updated_at: new Date().toISOString(), version: expected + 1 })
+          .eq('id', 'main').eq('version', expected).select('version');
+        if (error) { console.warn('saveState:', error.message); _emitSave('error', error.message); return; }
+        if (!data || data.length === 0) {
+          // version mismatch → someone wrote between our load and now
+          const { data: latest } = await _supa.from('app_state').select('data, version, client_id').eq('id', 'main').maybeSingle();
+          if (latest && latest.client_id === CLIENT_ID) { _baseVersion = latest.version; return; } // our own newer write, not a real conflict
+          _emitSave('conflict');
+          if (latest) _applyRemote(latest.data, latest.version);
+          return;
+        }
+        _baseVersion = data[0].version;
+        _emitSave('saved');
+      } catch (e) { console.warn('saveState error:', e); _emitSave('error', String(e)); }
     }, 300);
   }
 
   // Subscribe to remote changes (other tabs / other users). Ignores our own writes.
   function subscribe(onRemote) {
+    _onRemote = onRemote;
     if (!_supa) return function () {};
     const ch = _supa.channel('app_state_main')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'app_state', filter: 'id=eq.main' }, function (payload) {
         const row = payload.new;
         if (!row || row.client_id === CLIENT_ID) return;
+        if (typeof row.version === 'number') _baseVersion = row.version;
         const st = row.data; st.today = d(0); seedSeq(st); ensureSids(st); onRemote(st);
       })
       .subscribe();
     return function () { try { _supa.removeChannel(ch); } catch (e) {} };
   }
 
-  window.PG_DATA = { buildState, loadState, saveState, subscribe, snapshotState, emailFor, signIn, signOut, adminUser, genId, fgName, rmName, rmOnHand, rmLotsFEFO, rmReserved, rmAvailable, rmUnit, fgOnHand, bomRequirement, workflowForLine, buildWipLot, orderProgress, STEP_LIB, PROC_STATUS };
+  window.PG_DATA = { buildState, loadState, saveState, subscribe, snapshotState, onSaveStatus, emailFor, signIn, signOut, adminUser, genId, fgName, rmName, rmOnHand, rmLotsFEFO, rmReserved, rmAvailable, rmUnit, fgOnHand, bomRequirement, workflowForLine, buildWipLot, orderProgress, STEP_LIB, PROC_STATUS };
 })();

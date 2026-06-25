@@ -139,6 +139,16 @@
     const [route, setRoute] = React.useState(() => firstAllowed(myPerms));
     const [state, setStateRaw] = React.useState(null);
     const t = (k, v) => tr(lang, k, v);
+    const toast = useToast();
+
+    // Surface save outcomes: conflicts (another user wrote first → we reloaded) and errors.
+    React.useEffect(() => {
+      D.onSaveStatus((status) => {
+        if (status === 'error') toast(lang === 'th' ? 'บันทึกไม่สำเร็จ — ตรวจการเชื่อมต่อแล้วลองใหม่' : 'Save failed — check your connection and retry', 'warn');
+        else if (status === 'conflict') toast(lang === 'th' ? 'มีผู้ใช้อื่นแก้ข้อมูลพร้อมกัน — โหลดข้อมูลล่าสุดให้แล้ว กรุณาตรวจ/ทำรายการซ้ำ' : 'Another user edited at the same time — reloaded the latest; please review/redo', 'warn');
+      });
+      return () => D.onSaveStatus(null);
+    }, [lang]);
 
     // setState passed to modules: update React state AND persist the snapshot.
     const setState = React.useCallback((updater) => {
