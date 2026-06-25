@@ -382,5 +382,42 @@
     return function () { try { _supa.removeChannel(ch); } catch (e) {} };
   }
 
-  window.PG_DATA = { buildState, loadState, saveState, subscribe, snapshotState, onSaveStatus, emailFor, signIn, signOut, adminUser, genId, fgName, rmName, rmOnHand, rmLotsFEFO, rmReserved, rmAvailable, rmUnit, fgOnHand, bomRequirement, workflowForLine, buildWipLot, orderProgress, STEP_LIB, PROC_STATUS };
+  // Cap the append-only transaction logs in the blob: keep the newest ARCHIVE_CAP of each
+  // (new records are prepended, so the newest are at the head) and move the older overflow into
+  // app_state_archive — so the JSON snapshot can't grow without bound. Archives FIRST, then trims;
+  // if the archive write fails we keep everything in the blob (never lose data).
+  const ARCHIVE_CAP = 1000;
+  async function archiveOverflow(state) {
+    if (!_supa || !state) return { changed: false, state: state };
+    const rows = [], trim = {};
+    ['issues', 'fgSales', 'receipts'].forEach(function (kind) {
+      const arr = state[kind];
+      if (Array.isArray(arr) && arr.length > ARCHIVE_CAP) {
+        arr.slice(ARCHIVE_CAP).forEach(function (r) { rows.push({ kind: kind, record: r }); });
+        trim[kind] = arr.slice(0, ARCHIVE_CAP);
+      }
+    });
+    let lotsTrimmed = null;
+    if (Array.isArray(state.lotsWip)) {
+      state.lotsWip.forEach(function (l, i) {
+        if (l && Array.isArray(l.outputLog) && l.outputLog.length > ARCHIVE_CAP) {
+          l.outputLog.slice(ARCHIVE_CAP).forEach(function (r) { rows.push({ kind: 'outputLog', record: r, lot_id: l.id }); });
+          if (!lotsTrimmed) lotsTrimmed = state.lotsWip.slice();
+          lotsTrimmed[i] = Object.assign({}, l, { outputLog: l.outputLog.slice(0, ARCHIVE_CAP) });
+        }
+      });
+    }
+    if (rows.length === 0) return { changed: false, state: state };
+    try {
+      for (let i = 0; i < rows.length; i += 500) {
+        const { error } = await _supa.from('app_state_archive').insert(rows.slice(i, i + 500));
+        if (error) { console.warn('archiveOverflow:', error.message); return { changed: false, state: state }; }
+      }
+    } catch (e) { console.warn('archiveOverflow error:', e); return { changed: false, state: state }; }
+    const next = Object.assign({}, state, trim);
+    if (lotsTrimmed) next.lotsWip = lotsTrimmed;
+    return { changed: true, state: next, archived: rows.length };
+  }
+
+  window.PG_DATA = { buildState, loadState, saveState, subscribe, snapshotState, onSaveStatus, archiveOverflow, emailFor, signIn, signOut, adminUser, genId, fgName, rmName, rmOnHand, rmLotsFEFO, rmReserved, rmAvailable, rmUnit, fgOnHand, bomRequirement, workflowForLine, buildWipLot, orderProgress, STEP_LIB, PROC_STATUS };
 })();

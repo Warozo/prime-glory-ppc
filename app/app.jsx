@@ -163,7 +163,12 @@
     // (other tabs / other users) and apply them locally without re-saving.
     React.useEffect(() => {
       let mounted = true;
-      D.loadState().then(s => { if (mounted) setStateRaw(s); });
+      D.loadState().then(s => {
+        if (!mounted) return;
+        setStateRaw(s);
+        // prune overflowed transaction logs into the archive so the blob can't grow unbounded
+        D.archiveOverflow(s).then(res => { if (mounted && res && res.changed) { setStateRaw(res.state); D.saveState(res.state); } });
+      });
       const unsub = D.subscribe(remote => { if (mounted) setStateRaw(remote); });
       return () => { mounted = false; unsub(); };
     }, []);
