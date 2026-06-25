@@ -1,5 +1,5 @@
 {
-  "buildCommand": "echo 'Static site - no build needed'",
+  "buildCommand": "npm run build",
   "outputDirectory": ".",
   "rewrites": [
     {

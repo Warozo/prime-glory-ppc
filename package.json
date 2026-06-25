@@ -1,0 +1,12 @@
+{
+  "name": "prime-glory-ppc",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Prime Glory PPC production-planning system",
+  "scripts": {
+    "build": "esbuild app/_entry.jsx --bundle --outfile=dist/app.js --loader:.jsx=jsx --jsx=transform --format=iife --minify --target=es2018 --charset=utf8 --legal-comments=none"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
+  }
+}
