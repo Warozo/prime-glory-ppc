@@ -149,6 +149,7 @@
     React.useEffect(() => { if (state.fg.length && !state.fg.some(f => f.code === fgCode)) setFgCode(state.fg[0].code); }, [state.fg.length]);
 
     function saveFg(form) {
+      if (readOnly) return;
       setState(prev => ({ ...prev, fg: prev.fg.map(x => x.code === fgEdit.code ? { ...x, name: form.name || form.nameTh, nameTh: form.nameTh || form.name, unit: form.unit, cat: form.cat } : x) }));
       toast(t('toast.saved')); setFgEdit(null);
     }
@@ -209,7 +210,7 @@
                 React.createElement('div', { style: { cursor: 'pointer' }, onClick: () => setFgCode(f.code) },
                   React.createElement('div', { className: 'row', style: { justifyContent: 'space-between' } }, React.createElement('span', { className: 'mono', style: { fontSize: 11, fontWeight: 700, color: 'var(--primary)' } }, f.code), state.boms[f.code] && React.createElement('span', { className: 'badge badge-soft mono', style: { fontSize: 9.5 } }, state.boms[f.code].version)),
                   React.createElement('div', { style: { fontSize: 12, fontWeight: 600, marginTop: 2 } }, lang === 'th' ? f.nameTh : f.name)),
-                React.createElement('div', { className: 'row', style: { gap: 4, justifyContent: 'flex-end', marginTop: 6 } },
+                !readOnly && React.createElement('div', { className: 'row', style: { gap: 4, justifyContent: 'flex-end', marginTop: 6 } },
                   React.createElement('button', { className: 'btn btn-sm btn-ghost btn-icon', title: t('btn.edit'), onClick: (e) => { e.stopPropagation(); setFgEdit(f); } }, React.createElement(Icon, { name: 'edit', size: 12 })),
                   canDelete && React.createElement('button', { className: 'btn btn-sm btn-ghost btn-icon', title: t('btn.delete'), onClick: (e) => { e.stopPropagation(); delFg(f); } }, React.createElement(Icon, { name: 'trash', size: 12, style: { color: 'var(--danger)' } }))))) ) ),
         React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 14 } },
