@@ -122,8 +122,8 @@
       React.createElement('div', { className: 'grid g-2', style: { gap: 12 } },
         React.createElement(Field, { label: t('f.code'), required: true }, React.createElement('input', { className: 'input mono', value: f.code, disabled: !!edit, onChange: e => set('code', e.target.value), placeholder: tab === 'rm' ? 'RM014' : 'FG006' })),
         React.createElement(Field, { label: t('f.unit'), required: true }, React.createElement('select', { className: 'select', value: f.unit, onChange: e => set('unit', e.target.value) }, ['pcs', 'kg', 'g', 'L', 'ml'].map(u => React.createElement('option', { key: u }, u)))),
-        React.createElement('div', { style: { gridColumn: 'span 2' } }, React.createElement(Field, { label: (lang === 'th' ? 'ชื่อ (ไทย)' : 'Name (Thai)'), required: true }, React.createElement('input', { className: 'input', value: f.nameTh, onChange: e => set('nameTh', e.target.value) }))),
-        React.createElement('div', { style: { gridColumn: 'span 2' } }, React.createElement(Field, { label: (lang === 'th' ? 'ชื่อ (อังกฤษ)' : 'Name (English)') }, React.createElement('input', { className: 'input', value: f.name, onChange: e => set('name', e.target.value) }))),
+        React.createElement('div', { style: { gridColumn: 'span 2' } }, React.createElement(Field, { label: (lang === 'th' ? 'ชื่อสาร' : 'Substance name'), required: true }, React.createElement('input', { className: 'input', value: f.nameTh, onChange: e => set('nameTh', e.target.value) }))),
+        React.createElement('div', { style: { gridColumn: 'span 2' } }, React.createElement(Field, { label: 'INCI Name' }, React.createElement('input', { className: 'input', value: f.name, onChange: e => set('name', e.target.value) }))),
         React.createElement(Field, { label: t('f.category') }, React.createElement('input', { className: 'input', value: f.cat, onChange: e => set('cat', e.target.value), placeholder: tab === 'rm' ? 'Active / Base / Packaging' : 'Serum / Foundation / Lip' })),
         React.createElement(Field, { label: t('f.status') }, React.createElement('select', { className: 'select', value: f.status, onChange: e => set('status', e.target.value) },
           React.createElement('option', { value: 'A' }, t('f.active')),
@@ -131,14 +131,18 @@
   }
 
   /* ---------------- BOM Management ---------------- */
-  function BOM({ state, setState, canDelete }) {
+  function BOM({ state, setState, canDelete, readOnly }) {
     const { t, lang } = useI18n();
     const toast = useToast();
     const [fgCode, setFgCode] = React.useState(state.fg[0].code);
     const [calcQty, setCalcQty] = React.useState(10000);
     const [editLine, setEditLine] = React.useState(null); // { idx, rm, qty, unit } or { idx:-1 } for new
     const [fgEdit, setFgEdit] = React.useState(null);
+    const [draft, setDraft] = React.useState(null); // { lines } while creating a new version (reorder session)
+    const dragIdx = React.useRef(null);
     const bom = state.boms[fgCode];
+    // leaving a draft when switching product
+    React.useEffect(() => { setDraft(null); }, [fgCode]);
     const req = fgCode ? D.bomRequirement(state, fgCode, calcQty) : [];
 
     // keep selection valid if the current FG gets deleted (here or in another tab)
@@ -175,10 +179,21 @@
       setState(prev => { const boms = ensureBom(prev); boms[fgCode].lines.splice(idx, 1); return { ...prev, boms }; });
       toast(t('toast.deleted'), 'warn');
     }
-    function bumpVersion() {
-      setState(prev => { const boms = ensureBom(prev); const v = boms[fgCode].version || 'v1.0';
-        const n = parseFloat(v.replace(/[^0-9.]/g, '')) || 1.0; boms[fgCode] = { ...boms[fgCode], version: 'v' + (n + 0.1).toFixed(1) }; return { ...prev, boms }; });
-      toast(t('toast.bomsaved'));
+    // "New version" no longer saves immediately — it opens a reorder draft that must be confirmed.
+    const nextVersion = (v) => { const n = parseFloat((v || 'v1.0').replace(/[^0-9.]/g, '')) || 1.0; return 'v' + (n + 0.1).toFixed(1); };
+    function enterVersion() { setDraft({ lines: (bom ? bom.lines.slice() : []) }); }
+    function cancelVersion() { setDraft(null); dragIdx.current = null; }
+    function confirmVersion() {
+      setState(prev => {
+        const boms = ensureBom(prev); const cur = boms[fgCode];
+        boms[fgCode] = { ...cur, lines: draft.lines.slice(), version: nextVersion(cur.version) };
+        return { ...prev, boms };
+      });
+      toast(t('toast.bomsaved')); setDraft(null); dragIdx.current = null;
+    }
+    function reorderDraft(from, to) {
+      if (from == null || to == null || from === to) return;
+      setDraft(d => { const lines = d.lines.slice(); const m = lines.splice(from, 1)[0]; lines.splice(to, 0, m); return { lines: lines }; });
     }
 
     return React.createElement('div', null,
@@ -201,21 +216,39 @@
           React.createElement('div', { className: 'card' },
             React.createElement('div', { className: 'card-h' },
               React.createElement(Icon, { name: 'bom', size: 15, style: { color: 'var(--primary)' } }),
-              React.createElement('div', null, React.createElement('h3', null, D.fgName(state, fgCode, lang)), React.createElement('div', { className: 'sub' }, t('f.version') + ' ' + (bom ? bom.version : '—') + ' · ' + (bom ? bom.lines.length : 0) + ' ' + t('rawmat'))),
-              React.createElement('div', { className: 'card-h-actions' },
-                React.createElement('button', { className: 'btn btn-sm', onClick: bumpVersion, title: t('bom.newver') }, React.createElement(Icon, { name: 'edit', size: 13 }), t('bom.newver')),
-                React.createElement('button', { className: 'btn btn-sm btn-pri', onClick: () => setEditLine({ idx: -1, rm: state.raw[0].code, qty: '', unit: 'g' }) }, React.createElement(Icon, { name: 'plus', size: 13 }), t('bom.addline')))),
+              React.createElement('div', null, React.createElement('h3', null, D.fgName(state, fgCode, lang)),
+                React.createElement('div', { className: 'sub' }, t('f.version') + ' ' + (bom ? bom.version : '—') + ' · ' + ((draft ? draft.lines.length : (bom ? bom.lines.length : 0))) + ' ' + t('rawmat')
+                  + (draft ? ' · ' + (lang === 'th' ? 'กำลังสร้าง ' + nextVersion(bom ? bom.version : 'v1.0') + ' — ลากเพื่อจัดลำดับ' : 'creating ' + nextVersion(bom ? bom.version : 'v1.0') + ' — drag to reorder') : ''))),
+              readOnly
+                ? React.createElement('div', { className: 'card-h-actions' }, React.createElement('span', { className: 'badge badge-soft', style: { fontSize: 10.5 } }, lang === 'th' ? 'ดูอย่างเดียว' : 'View only'))
+                : draft
+                  ? React.createElement('div', { className: 'card-h-actions row', style: { gap: 6 } },
+                      React.createElement('button', { className: 'btn btn-sm', onClick: cancelVersion }, t('btn.cancel')),
+                      React.createElement('button', { className: 'btn btn-sm btn-pri', onClick: confirmVersion }, React.createElement(Icon, { name: 'checkcircle', size: 13 }), lang === 'th' ? 'บันทึกยืนยันสูตรผลิต' : 'Confirm & save formula'))
+                  : React.createElement('div', { className: 'card-h-actions row', style: { gap: 6 } },
+                      React.createElement('button', { className: 'btn btn-sm', onClick: enterVersion, title: t('bom.newver') }, React.createElement(Icon, { name: 'edit', size: 13 }), t('bom.newver')),
+                      React.createElement('button', { className: 'btn btn-sm btn-pri', onClick: () => setEditLine({ idx: -1, rm: state.raw[0].code, qty: '', unit: 'g' }) }, React.createElement(Icon, { name: 'plus', size: 13 }), t('bom.addline')))),
             React.createElement('table', { className: 'tbl' },
-              React.createElement('thead', null, React.createElement('tr', null, React.createElement('th', null, t('f.code')), React.createElement('th', null, t('rawmat')), React.createElement('th', { className: 'num' }, t('bom.qtyper')), React.createElement('th', null, t('f.unit')), React.createElement('th', { style: { width: 80 } }, ''))),
-              React.createElement('tbody', null, (bom && bom.lines.length) ? bom.lines.map((l, i) => React.createElement('tr', { key: i },
-                React.createElement('td', { className: 'mono', style: { fontWeight: 600, color: 'var(--primary)' } }, l.rm),
-                React.createElement('td', { style: { fontWeight: 600 } }, D.rmName(state, l.rm, lang)),
-                React.createElement('td', { className: 'num mono', style: { fontWeight: 600 } }, l.qty),
-                React.createElement('td', { className: 'mono' }, l.unit),
-                React.createElement('td', { className: 'num' }, React.createElement('div', { className: 'row', style: { gap: 4, justifyContent: 'flex-end' } },
-                  React.createElement('button', { className: 'btn btn-sm btn-ghost btn-icon', onClick: () => setEditLine({ idx: i, rm: l.rm, qty: l.qty, unit: l.unit }) }, React.createElement(Icon, { name: 'edit', size: 13 })),
-                  canDelete && React.createElement('button', { className: 'btn btn-sm btn-ghost btn-icon', onClick: () => delLine(i) }, React.createElement(Icon, { name: 'trash', size: 13, style: { color: 'var(--danger)' } }))))))
-                : React.createElement('tr', null, React.createElement('td', { colSpan: 5, className: 'empty' }, t('tbl.noresults')))))),
+              React.createElement('thead', null, React.createElement('tr', null, draft && React.createElement('th', { style: { width: 28 } }, ''), React.createElement('th', null, t('f.code')), React.createElement('th', null, t('rawmat')), React.createElement('th', { className: 'num' }, t('bom.qtyper')), React.createElement('th', null, t('f.unit')), React.createElement('th', { style: { width: 80 } }, ''))),
+              React.createElement('tbody', null, (function () {
+                const rows = draft ? draft.lines : ((bom && bom.lines) || []);
+                if (!rows.length) return React.createElement('tr', null, React.createElement('td', { colSpan: draft ? 6 : 5, className: 'empty' }, t('tbl.noresults')));
+                return rows.map((l, i) => React.createElement('tr', Object.assign({ key: i }, draft ? {
+                    draggable: true,
+                    onDragStart: () => { dragIdx.current = i; },
+                    onDragOver: (e) => e.preventDefault(),
+                    onDrop: () => { reorderDraft(dragIdx.current, i); dragIdx.current = null; },
+                    style: { cursor: 'grab' }
+                  } : {}),
+                  draft && React.createElement('td', { style: { color: 'var(--text-faint)', textAlign: 'center' }, title: lang === 'th' ? 'ลากเพื่อจัดลำดับ' : 'Drag to reorder' }, '⣿'),
+                  React.createElement('td', { className: 'mono', style: { fontWeight: 600, color: 'var(--primary)' } }, l.rm),
+                  React.createElement('td', { style: { fontWeight: 600 } }, D.rmName(state, l.rm, lang)),
+                  React.createElement('td', { className: 'num mono', style: { fontWeight: 600 } }, l.qty),
+                  React.createElement('td', { className: 'mono' }, l.unit),
+                  React.createElement('td', { className: 'num' }, (draft || readOnly) ? null : React.createElement('div', { className: 'row', style: { gap: 4, justifyContent: 'flex-end' } },
+                    React.createElement('button', { className: 'btn btn-sm btn-ghost btn-icon', onClick: () => setEditLine({ idx: i, rm: l.rm, qty: l.qty, unit: l.unit }) }, React.createElement(Icon, { name: 'edit', size: 13 })),
+                    canDelete && React.createElement('button', { className: 'btn btn-sm btn-ghost btn-icon', onClick: () => delLine(i) }, React.createElement(Icon, { name: 'trash', size: 13, style: { color: 'var(--danger)' } }))))));
+              })()))),
           React.createElement('div', { className: 'card' },
             React.createElement('div', { className: 'card-h' }, React.createElement(Icon, { name: 'calc', size: 15, style: { color: 'var(--primary)' } }), React.createElement('h3', null, lang === 'th' ? 'คำนวณความต้องการวัตถุดิบ' : 'Material Requirement Calculation'),
               React.createElement('div', { className: 'card-h-actions row', style: { gap: 8 } },
@@ -401,6 +434,8 @@
       }
       const role = f.admin ? 'admin' : 'staff';
       const perms = f.admin ? [] : (f.perms || []);
+      // view-only sections (subset of granted perms; admins are always full access)
+      const viewOnly = f.admin ? [] : (f.viewOnly || []).filter(k => perms.indexOf(k) >= 0);
       // keep at least one active Admin (full access)
       if (isEdit && modal.user.role === 'admin' && role !== 'admin') {
         const activeAdmins = state.users.filter(x => x.role === 'admin' && x.status === 'A');
@@ -411,7 +446,7 @@
         const r = await D.adminUser('update', { oldEmail: D.emailFor(modal.user), email: newEmail, password: f.password || undefined, meta: { username: uname, name: f.name, app_id: modal.user.id, role: role } });
         if (!r.ok) { efail(r.error); return; }
         setState(prev => ({ ...prev, users: prev.users.map(u => u.id === modal.user.id
-          ? { ...u, name: f.name, username: uname, email: f.email, role, perms } : u) }));
+          ? { ...u, name: f.name, username: uname, email: f.email, role, perms, viewOnly } : u) }));
         toast(t('toast.saved')); setModal(null); return;
       }
       const nums = state.users.map(x => parseInt((x.id || '').replace(/\D/g, ''), 10)).filter(n => !isNaN(n));
@@ -419,7 +454,7 @@
       const email = D.emailFor({ email: f.email, username: uname });
       const r = await D.adminUser('create', { email: email, password: f.password, meta: { username: uname, name: f.name, app_id: id, role: role } });
       if (!r.ok) { efail(r.error); return; }
-      setState(prev => ({ ...prev, users: [...prev.users, { id, username: uname, name: f.name, email: f.email, role, perms, status: 'A', last: prev.today }] }));
+      setState(prev => ({ ...prev, users: [...prev.users, { id, username: uname, name: f.name, email: f.email, role, perms, viewOnly, status: 'A', last: prev.today }] }));
       toast(t('toast.usercreated')); setModal(null);
     }
     async function del(u) {
@@ -475,10 +510,13 @@
     const initPerms = edit
       ? (edit.role === 'admin' ? ['dashboard'] : (Array.isArray(edit.perms) ? edit.perms.slice() : (LEGACY[edit.role] || ['dashboard']).slice()))
       : ['dashboard'];
-    const [f, setF] = React.useState({ name: edit ? edit.name : '', username: edit ? edit.username : '', email: edit ? (edit.email || '') : '', password: '', admin: edit ? edit.role === 'admin' : false, perms: initPerms });
+    const VIEWONLY_KEYS = window.PG_VIEWONLY_KEYS || ['schedule', 'bom'];
+    const [f, setF] = React.useState({ name: edit ? edit.name : '', username: edit ? edit.username : '', email: edit ? (edit.email || '') : '', password: '', admin: edit ? edit.role === 'admin' : false, perms: initPerms, viewOnly: edit && Array.isArray(edit.viewOnly) ? edit.viewOnly.slice() : [] });
     const set = (k, v) => setF(p => ({ ...p, [k]: v }));
-    const togglePerm = (k) => setF(p => ({ ...p, perms: p.perms.indexOf(k) >= 0 ? p.perms.filter(x => x !== k) : p.perms.concat([k]) }));
-    const setAll = (on) => setF(p => ({ ...p, perms: on ? ALL_KEYS.slice() : [] }));
+    // toggling a section off also clears any view-only flag on it
+    const togglePerm = (k) => setF(p => { const has = p.perms.indexOf(k) >= 0; return { ...p, perms: has ? p.perms.filter(x => x !== k) : p.perms.concat([k]), viewOnly: has ? p.viewOnly.filter(x => x !== k) : p.viewOnly }; });
+    const setViewOnly = (k, on) => setF(p => ({ ...p, viewOnly: on ? (p.viewOnly.indexOf(k) >= 0 ? p.viewOnly : p.viewOnly.concat([k])) : p.viewOnly.filter(x => x !== k) }));
+    const setAll = (on) => setF(p => ({ ...p, perms: on ? ALL_KEYS.slice() : [], viewOnly: on ? p.viewOnly : [] }));
     const gen = () => set('password', Math.random().toString(36).slice(2, 10));
     const valid = f.name && f.username.trim() && (edit || f.password) && (f.admin || f.perms.length > 0);
     return React.createElement(Modal, { title: (edit ? t('btn.edit') : t('btn.new')) + ' · ' + t('nav.users'), onClose, width: 560,
@@ -507,9 +545,18 @@
                 React.createElement('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 18px' } },
                   NAV.map(sec => React.createElement('div', { key: sec.sec },
                     React.createElement('div', { style: { fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.4px', color: 'var(--text-faint)', marginBottom: 4 } }, t(sec.sec)),
-                    sec.items.map(it => React.createElement('label', { key: it.k, style: { display: 'flex', alignItems: 'center', gap: 7, padding: '3px 0', cursor: 'pointer', fontSize: 12 } },
-                      React.createElement('input', { type: 'checkbox', checked: f.perms.indexOf(it.k) >= 0, onChange: () => togglePerm(it.k) }),
-                      React.createElement('span', null, t('nav.' + it.k)))))))))));
+                    sec.items.map(it => {
+                      const on = f.perms.indexOf(it.k) >= 0;
+                      const canVO = VIEWONLY_KEYS.indexOf(it.k) >= 0;
+                      const vo = f.viewOnly.indexOf(it.k) >= 0;
+                      return React.createElement('div', { key: it.k, style: { display: 'flex', alignItems: 'center', gap: 7, padding: '3px 0', fontSize: 12 } },
+                        React.createElement('label', { style: { display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', flex: 1, minWidth: 0 } },
+                          React.createElement('input', { type: 'checkbox', checked: on, onChange: () => togglePerm(it.k) }),
+                          React.createElement('span', null, t('nav.' + it.k))),
+                        canVO && on && React.createElement('div', { className: 'row', style: { gap: 3, flexShrink: 0 } },
+                          React.createElement('button', { type: 'button', className: 'btn btn-sm' + (!vo ? ' btn-pri' : ''), style: { padding: '1px 7px', fontSize: 10 }, onClick: () => setViewOnly(it.k, false), title: lang === 'th' ? 'ใช้งานได้เต็ม' : 'Full access' }, lang === 'th' ? 'ใช้งาน' : 'Full'),
+                          React.createElement('button', { type: 'button', className: 'btn btn-sm' + (vo ? ' btn-pri' : ''), style: { padding: '1px 7px', fontSize: 10 }, onClick: () => setViewOnly(it.k, true), title: lang === 'th' ? 'ดูอย่างเดียว แก้ไขไม่ได้' : 'View only' }, lang === 'th' ? 'ดูอย่างเดียว' : 'View')));
+                    }))))))));
   }
 
   /* ---------------- Partners / Staff registry ---------------- */
@@ -520,29 +567,46 @@
     const [modal, setModal] = React.useState(null); // { listKey, mode, index, value }
 
     const LISTS = [
-      { key: 'customers', icon: 'orders', th: 'ลูกค้า', en: 'Customers', subTh: 'ใช้ใน คำสั่งซื้อลูกค้า + เอกสารขาย', subEn: 'Used in customer orders + sales documents' },
-      { key: 'suppliers', icon: 'receive', th: 'ผู้ขาย / ซัพพลายเออร์', en: 'Suppliers', subTh: 'ใช้ใน รับเข้าวัตถุดิบ', subEn: 'Used in material receiving' },
+      { key: 'customers', icon: 'orders', th: 'ลูกค้า', en: 'Customers', subTh: 'ใช้ใน คำสั่งซื้อลูกค้า + เอกสารขาย', subEn: 'Used in customer orders + sales documents', codeMap: 'customerCodes', codeTh: 'รหัสลูกค้า', codeEn: 'Customer code' },
+      { key: 'suppliers', icon: 'receive', th: 'ผู้ขาย / ซัพพลายเออร์', en: 'Suppliers', subTh: 'ใช้ใน รับเข้าวัตถุดิบ', subEn: 'Used in material receiving', codeMap: 'supplierCodes', codeTh: 'รหัสผู้ขาย / ซัพพลายเออร์', codeEn: 'Supplier code' },
       { key: 'salesReps', icon: 'users', th: 'พนักงานขาย', en: 'Sales reps', subTh: 'ใช้ใน สร้างเอกสารขาย (ผู้บันทึก)', subEn: 'Used in sales documents (recorded by)' },
     ];
+    const cfgOf = (k) => LISTS.find(l => l.key === k);
     const listOf = (k) => state[k] || [];
+    const codeOf = (cfg, name) => (cfg && cfg.codeMap && state[cfg.codeMap] && state[cfg.codeMap][name]) || '';
 
     function save(form) {
       const name = (form.value || '').trim();
       if (!name) return;
       const key = form.listKey;
+      const cfg = cfgOf(key);
       const cur = listOf(key);
       const dupAt = cur.findIndex(x => x.toLowerCase() === name.toLowerCase());
       if (dupAt >= 0 && dupAt !== form.index) { toast(lang === 'th' ? 'ชื่อนี้มีอยู่แล้ว' : 'Name already exists', 'warn'); return; }
       setState(prev => {
         const arr = (prev[key] || []).slice();
+        const next = { ...prev };
+        const oldName = form.mode === 'edit' ? arr[form.index] : null;
         if (form.mode === 'edit') arr[form.index] = name; else arr.push(name);
-        return { ...prev, [key]: arr };
+        next[key] = arr;
+        if (cfg && cfg.codeMap) {
+          const cm = { ...(prev[cfg.codeMap] || {}) };
+          if (oldName && oldName !== name) delete cm[oldName];
+          cm[name] = (form.code || '').trim();
+          next[cfg.codeMap] = cm;
+        }
+        return next;
       });
       toast(t('toast.saved')); setModal(null);
     }
     function del(key, index) {
       if (!window.confirm(lang === 'th' ? 'ลบรายการนี้?' : 'Delete this entry?')) return;
-      setState(prev => ({ ...prev, [key]: (prev[key] || []).filter((_, i) => i !== index) }));
+      const cfg = cfgOf(key);
+      setState(prev => {
+        const next = { ...prev, [key]: (prev[key] || []).filter((_, i) => i !== index) };
+        if (cfg && cfg.codeMap && prev[cfg.codeMap]) { const cm = { ...prev[cfg.codeMap] }; delete cm[(prev[key] || [])[index]]; next[cfg.codeMap] = cm; }
+        return next;
+      });
       toast(t('toast.deleted'), 'warn');
     }
 
@@ -553,26 +617,34 @@
           React.createElement('div', { className: 'card-h' },
             React.createElement(Icon, { name: L.icon, size: 15, style: { color: 'var(--primary)' } }),
             React.createElement('div', null, React.createElement('h3', null, lang === 'th' ? L.th : L.en), React.createElement('div', { className: 'sub' }, lang === 'th' ? L.subTh : L.subEn)),
-            React.createElement('button', { className: 'btn btn-sm btn-pri card-h-actions', onClick: () => setModal({ listKey: L.key, mode: 'add', index: -1, value: '' }) }, React.createElement(Icon, { name: 'plus', size: 13 }), t('btn.new'))),
+            React.createElement('button', { className: 'btn btn-sm btn-pri card-h-actions', onClick: () => setModal({ listKey: L.key, mode: 'add', index: -1, value: '', code: '', codeTh: L.codeTh, codeEn: L.codeEn }) }, React.createElement(Icon, { name: 'plus', size: 13 }), t('btn.new'))),
           React.createElement('div', { style: { padding: 8, display: 'flex', flexDirection: 'column', gap: 6 } },
             listOf(L.key).length === 0
               ? React.createElement('div', { className: 'empty', style: { fontSize: 11 } }, lang === 'th' ? 'ยังไม่มีรายชื่อ' : 'No entries yet')
               : listOf(L.key).map((name, i) => React.createElement('div', { key: i, className: 'row', style: { justifyContent: 'space-between', gap: 8, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 7, padding: '8px 10px' } },
-                  React.createElement('span', { style: { fontSize: 12.5, fontWeight: 600, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, name),
+                  React.createElement('div', { style: { minWidth: 0, display: 'flex', alignItems: 'center', gap: 7 } },
+                    L.codeMap && codeOf(L, name) && React.createElement('span', { className: 'badge badge-soft mono', style: { fontSize: 9.5, flexShrink: 0 } }, codeOf(L, name)),
+                    React.createElement('span', { style: { fontSize: 12.5, fontWeight: 600, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, name)),
                   React.createElement('div', { className: 'row', style: { gap: 2, flexShrink: 0 } },
-                    React.createElement('button', { className: 'btn btn-sm btn-ghost btn-icon', title: t('btn.edit'), onClick: () => setModal({ listKey: L.key, mode: 'edit', index: i, value: name }) }, React.createElement(Icon, { name: 'edit', size: 13 })),
+                    React.createElement('button', { className: 'btn btn-sm btn-ghost btn-icon', title: t('btn.edit'), onClick: () => setModal({ listKey: L.key, mode: 'edit', index: i, value: name, code: codeOf(L, name), codeTh: L.codeTh, codeEn: L.codeEn }) }, React.createElement(Icon, { name: 'edit', size: 13 })),
                     canDelete && React.createElement('button', { className: 'btn btn-sm btn-ghost btn-icon', title: t('btn.delete'), onClick: () => del(L.key, i) }, React.createElement(Icon, { name: 'trash', size: 13, style: { color: 'var(--danger)' } }))))))))),
       modal && React.createElement(PartnerModal, { modal, lang, t, onClose: () => setModal(null), onSubmit: save }));
   }
 
   function PartnerModal({ modal, lang, t, onClose, onSubmit }) {
     const [value, setValue] = React.useState(modal.value || '');
+    const [code, setCode] = React.useState(modal.code || '');
+    const hasCode = !!modal.codeTh;
+    const submit = () => { if (value.trim()) onSubmit(Object.assign({}, modal, { value, code })); };
     return React.createElement(Modal, { title: (modal.mode === 'edit' ? (lang === 'th' ? 'แก้ไขรายชื่อ' : 'Edit entry') : (lang === 'th' ? 'เพิ่มรายชื่อ' : 'Add entry')), onClose, width: 420,
       footer: React.createElement(React.Fragment, null,
         React.createElement('button', { className: 'btn', onClick: onClose }, t('btn.cancel')),
-        React.createElement('button', { className: 'btn btn-pri', disabled: !value.trim(), onClick: () => onSubmit(Object.assign({}, modal, { value })) }, t('btn.save'))) },
-      React.createElement(Field, { label: lang === 'th' ? 'ชื่อ' : 'Name', required: true },
-        React.createElement('input', { className: 'input', value: value, autoFocus: true, onChange: e => setValue(e.target.value), onKeyDown: e => { if (e.key === 'Enter' && value.trim()) onSubmit(Object.assign({}, modal, { value })); } })));
+        React.createElement('button', { className: 'btn btn-pri', disabled: !value.trim(), onClick: submit }, t('btn.save'))) },
+      React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 12 } },
+        React.createElement(Field, { label: lang === 'th' ? 'ชื่อ' : 'Name', required: true },
+          React.createElement('input', { className: 'input', value: value, autoFocus: true, onChange: e => setValue(e.target.value), onKeyDown: e => { if (e.key === 'Enter') submit(); } })),
+        hasCode && React.createElement(Field, { label: lang === 'th' ? modal.codeTh : modal.codeEn },
+          React.createElement('input', { className: 'input mono', value: code, onChange: e => setCode(e.target.value), onKeyDown: e => { if (e.key === 'Enter') submit(); } }))));
   }
 
   window.PG_ItemMaster = ItemMaster;

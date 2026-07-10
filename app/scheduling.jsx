@@ -10,7 +10,7 @@
   const DAYS = 12, DAY_W = 62, ROW_H = 82, LABEL_W = 178;
   const LINE_COLORS = { A: '#2d5bd7', B: '#7b5cd9', C: '#1f8a5b' };
 
-  function Schedule({ state, setState, go }) {
+  function Schedule({ state, setState, go, readOnly }) {
     const { t, lang } = useI18n();
     const toast = useToast();
     const gridRef = React.useRef(null);
@@ -63,6 +63,7 @@
     const dayDate = (i) => { const d = new Date(state.today); d.setDate(d.getDate() + startOffset + i); return d; };
 
     function onBarPointerDown(e, bar, mode) {
+      if (readOnly) return; // view-only: no drag / resize
       e.stopPropagation();
       e.preventDefault();
       // measure the ACTUAL rendered day-cell width and row height so the drag
@@ -115,6 +116,7 @@
     const [dropLine, setDropLine] = React.useState(null);
     function onDrop(e, lineId) {
       e.preventDefault(); setDropLine(null);
+      if (readOnly) return; // view-only: cannot place orders
       const poId = e.dataTransfer.getData('text/plain'); if (!poId) return;
       const po = state.prodOrders.find(p => p.id === poId); if (!po) return;
       if (!(po.status === 'issued' || po.status === 'scheduled' || po.status === 'inprogress')) return;
@@ -164,6 +166,7 @@
     const todayIdx = -startOffset; // column index of "today" within the window (may be off-window)
 
     const rangeControls = React.createElement('div', { className: 'row', style: { gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' } },
+      readOnly && React.createElement('span', { className: 'badge badge-soft', style: { fontSize: 10.5 } }, lang === 'th' ? 'ดูอย่างเดียว' : 'View only'),
       React.createElement('div', { className: 'pill-tabs' },
         [7, 15, 30].map(n => React.createElement('button', { key: n, className: (startOffset === 0 && dayCount === n) ? 'on' : '', onClick: () => quickRange(n) }, n + (lang === 'th' ? ' วัน' : 'd')))),
       React.createElement(DateField, { value: range.from, onChange: v => setRange(r => ({ ...r, from: v })), style: { width: 138 } }),
@@ -191,9 +194,9 @@
               poolReady.length === 0 && React.createElement('div', { className: 'empty', style: { fontSize: 11 } }, React.createElement(Icon, { name: 'box', size: 18 }), React.createElement('div', null, lang === 'th' ? 'ไม่มีใบสั่งพร้อมจัด' : 'No orders ready')),
               poolReady.map(po => {
                 const order = state.orders.find(x => x.id === po.order) || {};
-                return React.createElement('div', { key: po.id, draggable: true,
+                return React.createElement('div', { key: po.id, draggable: !readOnly,
                   onDragStart: (e) => e.dataTransfer.setData('text/plain', po.id),
-                  style: { background: 'var(--surface)', border: '1px solid var(--ok)', borderLeft: '3px solid var(--ok)', borderRadius: 7, padding: 9, cursor: 'grab', boxShadow: 'var(--shadow-sm)' } },
+                  style: { background: 'var(--surface)', border: '1px solid var(--ok)', borderLeft: '3px solid var(--ok)', borderRadius: 7, padding: 9, cursor: readOnly ? 'default' : 'grab', boxShadow: 'var(--shadow-sm)' } },
                   React.createElement('div', { className: 'row', style: { justifyContent: 'space-between', marginBottom: 3 } },
                     React.createElement('span', { className: 'mono', style: { fontSize: 11, fontWeight: 700, color: 'var(--primary)' } }, po.id),
                     order.priority && React.createElement(PriorityBadge, { p: order.priority })),
@@ -261,7 +264,7 @@
                       return React.createElement('div', { key: i, style: { width: DAY_W, flexShrink: 0, borderLeft: '1px solid var(--border)', background: i === todayIdx ? 'rgba(45,91,215,.04)' : (wd === 0 || wd === 6) ? 'var(--surface-2)' : 'transparent' } });
                     }),
                     // bars
-                    lineBars.map(b => React.createElement(Bar, { key: b.id, bar: b, state, lang, t, startOffset, active: activeBar === b.id, started: barStarted(b), completed: barCompleted(b),
+                    lineBars.map(b => React.createElement(Bar, { key: b.id, bar: b, state, lang, t, startOffset, readOnly, active: activeBar === b.id, started: barStarted(b), completed: barCompleted(b),
                       produced: (function () { const l = lotOfBar(b); return l ? (l.stations[l.stations.length - 1].cumOut || 0) : 0; })(),
                       onStart: startProduction, onPointerDown: onBarPointerDown }))));
               }))),
@@ -292,7 +295,7 @@
         React.createElement('button', { className: 'btn btn-sm', onClick: () => setQty(String(max)) }, lang === 'th' ? 'ทั้งหมด' : 'All')));
   }
 
-  function Bar({ bar, state, lang, t, startOffset, active, started, completed, produced, onStart, onPointerDown }) {
+  function Bar({ bar, state, lang, t, startOffset, readOnly, active, started, completed, produced, onStart, onPointerDown }) {
     const col = completed ? 'var(--ok)' : (LINE_COLORS[bar.line] || '#2d5bd7');
     const pct = bar.qty > 0 ? Math.min(100, Math.round((produced || 0) / bar.qty * 100)) : 0;
     return React.createElement('div', {
@@ -309,8 +312,8 @@
           started ? (fmt(produced || 0) + '/' + fmt(bar.qty) + ' (' + pct + '%)') : fmt(bar.qty))),
       React.createElement('div', { className: 'row', style: { justifyContent: 'space-between', gap: 6 } },
         React.createElement('span', { style: { fontSize: 10.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 } }, D.fgName(state, bar.fg, lang)),
-        started
-          ? React.createElement('span', { style: { fontSize: 8.5, fontWeight: 700, color: completed ? 'var(--ok)' : 'var(--primary)', display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 } }, React.createElement(Icon, { name: completed ? 'check' : 'play', size: 8 }), completed ? t('status.completed') : t('sch.producing'))
+        (started || readOnly)
+          ? React.createElement('span', { style: { fontSize: 8.5, fontWeight: 700, color: completed ? 'var(--ok)' : 'var(--primary)', display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 } }, started ? React.createElement(React.Fragment, null, React.createElement(Icon, { name: completed ? 'check' : 'play', size: 8 }), completed ? t('status.completed') : t('sch.producing')) : null)
           : React.createElement('button', { onPointerDown: (e) => e.stopPropagation(), onClick: (e) => { e.stopPropagation(); onStart(bar); },
               style: { flexShrink: 0, fontSize: 8.5, fontWeight: 700, color: '#fff', background: col, border: 'none', borderRadius: 4, padding: '2px 6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 2 } },
               React.createElement(Icon, { name: 'play', size: 8 }), t('sch.start'))),

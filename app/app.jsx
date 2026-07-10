@@ -35,6 +35,13 @@
     const lp = LEGACY_PERMS[u.role]; return lp ? lp.slice() : ['dashboard'];
   }
   function allowed(perms, key) { return Array.isArray(perms) && perms.indexOf(key) >= 0; }
+  // Sections that can be granted as "view only" (see but not edit). Admins always have full access.
+  const VIEWONLY_KEYS = ['schedule', 'bom'];
+  function isViewOnly(u, key) {
+    if (!u || u.role === 'admin') return false;
+    return Array.isArray(u.viewOnly) && u.viewOnly.indexOf(key) >= 0;
+  }
+  window.PG_VIEWONLY_KEYS = VIEWONLY_KEYS;
   // First page the user may see — used as the landing/default route
   function firstAllowed(perms) {
     for (var i = 0; i < NAV.length; i++) for (var j = 0; j < NAV[i].items.length; j++) { var k = NAV[i].items[j].k; if (allowed(perms, k)) return k; }
@@ -183,7 +190,7 @@
 
     // Delete actions + admin-only data tools are limited to full-access (Admin) users
     const canDelete = isAdmin;
-    const props = { state, setState, go, canDelete, role: isAdmin ? 'admin' : 'staff', me };
+    const props = { state, setState, go, canDelete, role: isAdmin ? 'admin' : 'staff', me, readOnly: isViewOnly(me, route) };
     const waitingCount = (state.orders || []).filter(o => o.status === 'waiting').length;
 
     const curLabel = t(NAV_LABEL[route] || 'nav.dashboard');
@@ -248,7 +255,7 @@
 
     const t = (k, v) => tr(lang, k, v);
     const login = (user) => {
-      const m = { username: user.username, name: user.name, role: user.role, perms: Array.isArray(user.perms) ? user.perms : null };
+      const m = { username: user.username, name: user.name, role: user.role, perms: Array.isArray(user.perms) ? user.perms : null, viewOnly: Array.isArray(user.viewOnly) ? user.viewOnly : [] };
       setMe(m); localStorage.setItem('pg_user', JSON.stringify(m));
     };
     const logout = () => { try { window.PG_DATA.signOut(); } catch (e) {} setMe(null); localStorage.removeItem('pg_user'); localStorage.removeItem('pg_auth'); };
