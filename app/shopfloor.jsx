@@ -422,6 +422,23 @@
     const lineIds = s.lines.filter(l => cum[l.id]).map(l => l.id);
     const hasData = lineIds.length > 0;
 
+    function exportQA() {
+      const headers = [lang === 'th' ? 'สาย' : 'Line', lang === 'th' ? 'ใบสั่งผลิต' : 'Production order', lang === 'th' ? 'ขั้น QA' : 'QA step', lang === 'th' ? 'สินค้า' : 'Product']
+        .concat(cols.map(c => c.k === 'lunch' ? (lang === 'th' ? 'พักเที่ยง' : 'Lunch') : c.label))
+        .concat([lang === 'th' ? 'Defect รวม' : 'Total defect', lang === 'th' ? 'รอ Rework' : 'Pending rework']);
+      const rows = [];
+      lineIds.forEach(ln => {
+        const ln0 = s.lines.find(l => l.id === ln);
+        const lineName = ln0 ? ln0.name : 'Line ' + ln;
+        Object.keys(cum[ln]).forEach(po => Object.keys(cum[ln][po]).forEach(idx => {
+          const info = cum[ln][po][idx];
+          const hrow = cols.map(c => (((hourly[ln] || {})[po] || {})[idx] || {})[c.k] || 0);
+          rows.push([lineName, po, info.name, D.fgName(s, info.fg, lang)].concat(hrow).concat([info.defect, info.defect - info.rework]));
+        }));
+      });
+      window.PG_UI.exportCsv('qa-defects-' + day + '.csv', headers, rows);
+    }
+
     return React.createElement('div', null,
       React.createElement(PageHead, { title: lang === 'th' ? 'กระดานคุณภาพ (QA)' : 'Quality Board (QA)', sub: lang === 'th' ? 'ติดตาม Defect รายชั่วโมง แยกตามสายผลิตและใบสั่งผลิต' : 'Hourly defects by production line and order' }),
       React.createElement('div', { className: 'grid g-3', style: { marginBottom: 'var(--gap)' } },
@@ -433,6 +450,7 @@
           React.createElement(Icon, { name: 'qc', size: 15, style: { color: 'var(--danger)' } }),
           React.createElement('h3', null, lang === 'th' ? 'Defect รายชั่วโมง' : 'Hourly defects'),
           React.createElement('div', { className: 'card-h-actions row', style: { gap: 10 } },
+            React.createElement('button', { className: 'btn btn-sm', onClick: exportQA, disabled: !hasData }, React.createElement(Icon, { name: 'export', size: 14 }), lang === 'th' ? 'ส่งออก CSV' : 'Export CSV'),
             React.createElement('span', { className: 'faint', style: { fontSize: 11.5 } }, lang === 'th' ? 'เลือกวัน' : 'Day'),
             React.createElement(DateField, { value: day, onChange: setDay, style: { width: 150 } }))),
         !hasData

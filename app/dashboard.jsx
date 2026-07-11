@@ -148,8 +148,25 @@
     const hasOut = grandTotal > 0;
     const rowSum = (m) => dates.reduce((a, iso) => a + ((m || {})[iso] || 0), 0);
 
+    function exportDaily() {
+      const headers = [lang === 'th' ? 'สายการผลิต' : 'Line', lang === 'th' ? 'ใบสั่งผลิต' : 'Production order', lang === 'th' ? 'สินค้า' : 'Product']
+        .concat(dates.map(iso => fmtDate(iso))).concat([lang === 'th' ? 'รวม' : 'Total']);
+      const rows = [];
+      showLines.forEach(ln => {
+        const ln0 = s.lines.find(l => l.id === ln);
+        const lineName = ln0 ? ln0.name : 'Line ' + ln;
+        Object.keys(grid[ln] || {}).forEach(po => {
+          const info = poInfo[po] || {};
+          rows.push([lineName, po, D.fgName(s, info.fg, lang)].concat(dates.map(iso => (grid[ln][po] || {})[iso] || 0)).concat([rowSum(grid[ln][po])]));
+        });
+      });
+      rows.push([lang === 'th' ? 'รวมทุกสาย' : 'All lines', '', ''].concat(dates.map(iso => totalByDate[iso] || 0)).concat([grandTotal]));
+      window.PG_UI.exportCsv('daily-output-' + range.from + '_' + range.to + '.csv', headers, rows);
+    }
+
     return React.createElement(Card, { title: t('db.dailyoutput'), icon: 'dashboard',
       actions: React.createElement('div', { className: 'row', style: { gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' } },
+        React.createElement('button', { className: 'btn btn-sm', onClick: exportDaily, disabled: !hasOut }, React.createElement(Icon, { name: 'export', size: 14 }), lang === 'th' ? 'ส่งออก CSV' : 'Export CSV'),
         React.createElement('div', { className: 'pill-tabs' },
           [7, 15, 30].map(n => React.createElement('button', { key: n, className: dates.length === n ? 'on' : '', onClick: () => quick(n) }, n + (lang === 'th' ? ' วัน' : 'd')))),
         React.createElement(DateField, { value: range.from, onChange: v => setRange(r => ({ ...r, from: v })), style: { width: 138 } }),
