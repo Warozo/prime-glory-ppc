@@ -324,6 +324,16 @@
     const [statusSel, setStatusSel] = React.useState([]); // empty = show all
     const toggleStatus = (k) => setStatusSel(p => p.includes(k) ? p.filter(x => x !== k) : [...p, k]);
 
+    // Date-range filter — same behaviour as the production-status board: trims ONLY finished
+    // orders (produced / FG received); active orders always show. Default: last 30 days.
+    const DateField = window.PG_UI.DateField;
+    const daysAgo = (n) => { const d = new Date(state.today); d.setDate(d.getDate() - (n - 1)); return d.toISOString().slice(0, 10); };
+    const [range, setRange] = React.useState(() => ({ from: daysAgo(30), to: state.today, all: false, preset: 30 }));
+    const setPreset = (n) => setRange({ from: daysAgo(n), to: state.today, all: false, preset: n });
+    const doneDate = (o) => (o.completedAt || o.due || '').slice(0, 10); // fallback to due for old orders
+    const inWindow = (o) => { if (range.all) return true; if (o.status !== 'completed') return true; const d = doneDate(o); return !d || (d >= range.from && d <= range.to); };
+    const hiddenCount = range.all ? 0 : state.orders.filter(o => o.status === 'completed' && !inWindow(o)).length;
+
     function add(f) {
       const id = f.id.trim();
       if (prev_exists(state, id)) { toast(lang === 'th' ? 'เลขที่คำสั่งซื้อซ้ำ' : 'Order number already exists', 'warn'); return; }
@@ -337,6 +347,7 @@
     const needle = q.trim().toLowerCase();
     const filtered = state.orders.filter(o => {
       const pr = D.orderProgress(state, o);
+      if (!inWindow(o)) return false;
       if (statusSel.length && !statusSel.includes(derivedStatusKey(o, pr))) return false;
       if (needle) {
         const hay = (o.id + ' ' + (o.customer || '') + ' ' + D.fgName(state, o.fg, lang)).toLowerCase();
@@ -362,7 +373,17 @@
               style: { fontSize: 11, padding: '3px 11px', borderRadius: 20, cursor: 'pointer', border: '1px solid ' + (on ? s.c : 'var(--border)'), background: on ? s.bg : 'var(--surface)', color: on ? s.c : 'var(--text-muted)', fontWeight: on ? 700 : 500 } },
               lang === 'th' ? s.th : s.en);
           }),
-          statusSel.length === 0 && React.createElement('span', { className: 'faint', style: { fontSize: 10.5 } }, lang === 'th' ? '(ไม่เลือก = แสดงทั้งหมด)' : '(none = show all)'))),
+          statusSel.length === 0 && React.createElement('span', { className: 'faint', style: { fontSize: 10.5 } }, lang === 'th' ? '(ไม่เลือก = แสดงทั้งหมด)' : '(none = show all)')),
+        React.createElement('div', { className: 'row', style: { gap: 10, flexWrap: 'wrap', marginTop: 10, alignItems: 'center' } },
+          React.createElement('span', { className: 'faint', style: { fontSize: 11, marginRight: 2 } }, lang === 'th' ? 'ช่วงวันที่ (เฉพาะใบที่เสร็จ):' : 'Date range (finished only):'),
+          React.createElement('div', { className: 'pill-tabs' },
+            [7, 15, 30, 90].map(n => React.createElement('button', { key: n, className: (!range.all && range.preset === n) ? 'on' : '', onClick: () => setPreset(n) }, n + (lang === 'th' ? ' วัน' : 'd'))).concat([
+              React.createElement('button', { key: 'all', className: range.all ? 'on' : '', onClick: () => setRange(r => ({ ...r, all: true, preset: 0 })) }, lang === 'th' ? 'ทั้งหมด' : 'All')])),
+          React.createElement(DateField, { value: range.from, onChange: v => setRange(r => ({ ...r, from: v, all: false, preset: 0 })), style: { width: 138 } }),
+          React.createElement('span', { className: 'faint' }, '–'),
+          React.createElement(DateField, { value: range.to, onChange: v => setRange(r => ({ ...r, to: v, all: false, preset: 0 })), style: { width: 138 } }),
+          hiddenCount > 0 && React.createElement('span', { className: 'badge', style: { marginLeft: 'auto', color: 'var(--text-muted)', background: 'var(--surface-3)', fontSize: 11 } }, lang === 'th' ? 'ซ่อนใบที่เสร็จเก่ากว่า ' + hiddenCount + ' ใบ' : hiddenCount + ' older finished hidden'),
+          hiddenCount > 0 && React.createElement('button', { className: 'btn btn-sm', style: { marginLeft: 0 }, onClick: () => setRange(r => ({ ...r, all: true, preset: 0 })) }, lang === 'th' ? 'แสดงทั้งหมด' : 'Show all'))),
       React.createElement('div', { className: 'card' },
         React.createElement('table', { className: 'tbl' },
           React.createElement('thead', null, React.createElement('tr', null,
