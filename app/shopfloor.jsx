@@ -73,7 +73,7 @@
         if (justCompleted) {
           setTimeout(() => toast(t('toast.completed')), 50);
           next.prodOrders = prev.prodOrders.map(p => p.id === poId ? { ...p, status: 'completed', completedAt: prev.today } : p);
-          next.orders = prev.orders.map(o => o.id === after.order ? { ...o, status: 'completed' } : o);
+          next.orders = prev.orders.map(o => o.id === after.order ? { ...o, status: 'completed', completedAt: prev.today } : o);
         }
         return next;
       });
@@ -113,7 +113,7 @@
         if (producedBefore < orderQty && producedNow >= orderQty) {
           setTimeout(() => toast(t('toast.completed')), 50);
           next.prodOrders = prev.prodOrders.map(p => p.id === poId ? { ...p, status: 'completed', completedAt: prev.today } : p);
-          next.orders = prev.orders.map(o => o.id === after.order ? { ...o, status: 'completed' } : o);
+          next.orders = prev.orders.map(o => o.id === after.order ? { ...o, status: 'completed', completedAt: prev.today } : o);
         }
         return next;
       });

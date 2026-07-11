@@ -327,7 +327,7 @@
     function add(f) {
       const id = f.id.trim();
       if (prev_exists(state, id)) { toast(lang === 'th' ? 'เลขที่คำสั่งซื้อซ้ำ' : 'Order number already exists', 'warn'); return; }
-      setState(prev => ({ ...prev, orders: [{ id, customer: f.customer, fg: f.fg, qty: +f.qty, due: f.due, priority: f.priority, status: 'request' }, ...prev.orders] }));
+      setState(prev => ({ ...prev, orders: [{ id, customer: f.customer, fg: f.fg, qty: +f.qty, due: f.due, priority: f.priority, status: 'request', created: prev.today }, ...prev.orders] }));
       toast(t('toast.saved')); setShow(false);
     }
     function prev_exists(s, id) { return s.orders.some(o => o.id === id); }

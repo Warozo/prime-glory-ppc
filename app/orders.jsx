@@ -15,6 +15,15 @@
     const toast = useToast();
     const [sel, setSel] = React.useState(null);
 
+    // Date-range filter — applies ONLY to the two finished columns (produced / FG received) so
+    // active work is always visible. Default: finished orders from the last 30 days.
+    const daysAgo = (n) => { const d = new Date(state.today); d.setDate(d.getDate() - (n - 1)); return d.toISOString().slice(0, 10); };
+    const [range, setRange] = React.useState(() => ({ from: daysAgo(30), to: state.today, all: false, preset: 30 }));
+    const setPreset = (n) => setRange({ from: daysAgo(n), to: state.today, all: false, preset: n });
+    const doneDate = (o) => (o.completedAt || o.due || '').slice(0, 10); // fallback to due for old orders
+    const inWindow = (o) => { if (range.all) return true; const d = doneDate(o); return !d || (d >= range.from && d <= range.to); };
+    const hiddenCount = range.all ? 0 : state.orders.filter(o => o.status === 'completed' && !inWindow(o)).length;
+
     const order = sel ? state.orders.find(o => o.id === sel) : null;
 
     const PREV = { waiting: 'request', reserved: 'waiting' };
@@ -112,6 +121,19 @@
         actions: React.createElement('button', { className: 'btn btn-pri', onClick: () => go('orders') },
           React.createElement(Icon, { name: 'plus', size: 15 }), t('btn.new')) }),
 
+      // Date-range filter — only trims the two finished columns; active columns always show in full.
+      React.createElement('div', { className: 'card', style: { marginBottom: 12, padding: 12 } },
+        React.createElement('div', { className: 'row', style: { gap: 10, flexWrap: 'wrap', alignItems: 'center' } },
+          React.createElement('span', { className: 'faint', style: { fontSize: 11.5, fontWeight: 600 } }, lang === 'th' ? 'ช่วงวันที่ (เฉพาะใบที่เสร็จ):' : 'Date range (finished orders only):'),
+          React.createElement('div', { className: 'pill-tabs' },
+            [7, 15, 30, 90].map(n => React.createElement('button', { key: n, className: (!range.all && range.preset === n) ? 'on' : '', onClick: () => setPreset(n) }, n + (lang === 'th' ? ' วัน' : 'd'))).concat([
+              React.createElement('button', { key: 'all', className: range.all ? 'on' : '', onClick: () => setRange(r => ({ ...r, all: true, preset: 0 })) }, lang === 'th' ? 'ทั้งหมด' : 'All')])),
+          React.createElement(DateField, { value: range.from, onChange: v => setRange(r => ({ ...r, from: v, all: false, preset: 0 })), style: { width: 140 } }),
+          React.createElement('span', { className: 'faint' }, '–'),
+          React.createElement(DateField, { value: range.to, onChange: v => setRange(r => ({ ...r, to: v, all: false, preset: 0 })), style: { width: 140 } }),
+          hiddenCount > 0 && React.createElement('span', { className: 'badge', style: { marginLeft: 'auto', color: 'var(--text-muted)', background: 'var(--surface-3)', fontSize: 11 } }, lang === 'th' ? 'ซ่อนใบที่เสร็จเก่ากว่า ' + hiddenCount + ' ใบ' : hiddenCount + ' older finished hidden'),
+          hiddenCount > 0 && React.createElement('button', { className: 'btn btn-sm', style: { marginLeft: range.all ? 'auto' : 0 }, onClick: () => setRange(r => ({ ...r, all: true, preset: 0 })) }, lang === 'th' ? 'แสดงทั้งหมด' : 'Show all'))),
+
       // Pipeline board — 6 columns: 3 plan stages + 3 production stages (derived from live progress)
       (function () {
         const SC = window.PG_UI.STATUS_COLOR;
@@ -122,9 +144,9 @@
           { key: 'scheduled', label: t('status.scheduled'), color: SC.scheduled, variant: 'scheduled',
             items: state.orders.filter(o => o.status === 'scheduled') },
           { key: 'produced', label: t('status.completed'), color: 'var(--st-completed)', variant: 'produced',
-            items: state.orders.filter(o => o.status === 'completed' && D.orderProgress(state, o).received < o.qty) },
+            items: state.orders.filter(o => o.status === 'completed' && D.orderProgress(state, o).received < o.qty && inWindow(o)) },
           { key: 'fgdone',   label: lang === 'th' ? 'รับเข้าคลังสำเร็จรูปเสร็จ' : 'FG fully received', color: 'var(--primary)', variant: 'fgdone',
-            items: state.orders.filter(o => o.status === 'completed' && D.orderProgress(state, o).received >= o.qty) },
+            items: state.orders.filter(o => o.status === 'completed' && D.orderProgress(state, o).received >= o.qty && inWindow(o)) },
         ];
         return React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 10, alignItems: 'start' } },
           COLS.map(col => React.createElement('div', { key: col.key, style: { background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 9, minHeight: 200 } },
