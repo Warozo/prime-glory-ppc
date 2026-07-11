@@ -156,7 +156,7 @@
     const logView = e('div', { className: 'card' },
       e('div', { className: 'card-h' }, e(Icon, { name: 'clock', size: 15, style: { color: 'var(--primary)' } }), e('h3', null, t('wh.issue.log')),
         e('span', { className: 'card-h-actions badge badge-soft' }, issues.length + ' / ' + allIssues.length + ' ' + (lang === 'th' ? 'รายการ' : 'records'))),
-      allIssues.length > 0 && e('div', { style: { padding: '10px 14px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' } },
+      e('div', { style: { padding: '10px 14px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' } },
         e('input', { className: 'input', style: { flex: '1 1 160px', minWidth: 130 }, placeholder: lang === 'th' ? 'ค้นหา วัตถุดิบ / ล็อต / อ้างอิง' : 'Search material / lot / ref', value: lq, onChange: ev => setLq(ev.target.value) }),
         e('select', { className: 'select', style: { width: 150 }, value: lType, onChange: ev => setLType(ev.target.value) },
           e('option', { value: '' }, lang === 'th' ? 'ทุกประเภท' : 'All types'),
