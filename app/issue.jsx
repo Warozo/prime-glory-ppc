@@ -134,11 +134,15 @@
           e('button', { className: 'btn btn-pri', style: { alignSelf: 'flex-start' }, disabled: addLots.length === 0 || !add.po, onClick: () => setPicker({ mode: 'add' }) },
             e(Icon, { name: 'issue', size: 14 }), t('wh.issue.selectlot')))));
 
-    // ---- Transaction log (with filter) ----
+    // ---- Transaction log (with filter) — default: last 30 days ----
+    const daysAgo = (n) => { const d = new Date(state.today); d.setDate(d.getDate() - (n - 1)); return d.toISOString().slice(0, 10); };
     const [lq, setLq] = React.useState('');
-    const [lFrom, setLFrom] = React.useState('');
-    const [lTo, setLTo] = React.useState('');
+    const [lPreset, setLPreset] = React.useState(30);
+    const [lFrom, setLFrom] = React.useState(() => daysAgo(30));
+    const [lTo, setLTo] = React.useState(() => state.today);
     const [lType, setLType] = React.useState('');
+    const setPresetDays = (n) => { setLPreset(n); setLFrom(daysAgo(n)); setLTo(state.today); };
+    const setAllDates = () => { setLPreset(0); setLFrom(''); setLTo(''); };
     const allIssues = state.issues || [];
     const lNeedle = lq.trim().toLowerCase();
     const issues = allIssues.filter(x => {
@@ -154,14 +158,17 @@
         e('span', { className: 'card-h-actions badge badge-soft' }, issues.length + ' / ' + allIssues.length + ' ' + (lang === 'th' ? 'รายการ' : 'records'))),
       allIssues.length > 0 && e('div', { style: { padding: '10px 14px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' } },
         e('input', { className: 'input', style: { flex: '1 1 160px', minWidth: 130 }, placeholder: lang === 'th' ? 'ค้นหา วัตถุดิบ / ล็อต / อ้างอิง' : 'Search material / lot / ref', value: lq, onChange: ev => setLq(ev.target.value) }),
-        e(DateField, { value: lFrom, onChange: setLFrom, style: { width: 130 } }),
-        e('span', { className: 'faint' }, '–'),
-        e(DateField, { value: lTo, onChange: setLTo, style: { width: 130 } }),
         e('select', { className: 'select', style: { width: 150 }, value: lType, onChange: ev => setLType(ev.target.value) },
           e('option', { value: '' }, lang === 'th' ? 'ทุกประเภท' : 'All types'),
           e('option', { value: 'po' }, t('wh.issue.bypo')),
           e('option', { value: 'add' }, t('wh.issue.add'))),
-        (lq || lFrom || lTo || lType) && e('button', { className: 'btn btn-sm', onClick: () => { setLq(''); setLFrom(''); setLTo(''); setLType(''); } }, lang === 'th' ? 'ล้าง' : 'Clear')),
+        e('div', { className: 'pill-tabs' },
+          [7, 15, 30, 90].map(n => e('button', { key: n, className: lPreset === n ? 'on' : '', onClick: () => setPresetDays(n) }, n + (lang === 'th' ? ' วัน' : 'd'))).concat([
+            e('button', { key: 'all', className: (lPreset === 0 && !lFrom && !lTo) ? 'on' : '', onClick: setAllDates }, lang === 'th' ? 'ทั้งหมด' : 'All')])),
+        e(DateField, { value: lFrom, onChange: v => { setLFrom(v); setLPreset(0); }, style: { width: 130 } }),
+        e('span', { className: 'faint' }, '–'),
+        e(DateField, { value: lTo, onChange: v => { setLTo(v); setLPreset(0); }, style: { width: 130 } }),
+        e('button', { className: 'btn btn-sm', onClick: () => { setLq(''); setLType(''); setPresetDays(30); } }, lang === 'th' ? 'ล้าง' : 'Clear')),
       issues.length === 0
         ? e('div', { className: 'empty', style: { fontSize: 12 } }, e(Icon, { name: 'clock', size: 22 }), e('div', { style: { marginTop: 8 } }, t('tbl.noresults')))
         : e('table', { className: 'tbl' },
