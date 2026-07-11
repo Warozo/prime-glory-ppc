@@ -166,23 +166,37 @@
     const totalRows = wh === 'rm' ? rmAgg.length : (state.fgStock || []).length;
     const shownRows = wh === 'rm' ? rmFiltered.length : fgFiltered.length;
     const st = (v) => (v || 'A') === 'A' ? (lang === 'th' ? 'ใช้งาน' : 'Active') : (lang === 'th' ? 'ปิดใช้งาน' : 'Inactive');
+    const lotsOf = (code) => state.lots.filter(l => l.rm === code && l.remaining > 0).sort((a, b) => new Date(a.expiry) - new Date(b.expiry));
+    // Summary export (one row per item); RM rows now also list their in-stock lot numbers.
     function exportStock() {
       const dt = state.today || new Date().toISOString().slice(0, 10);
       if (wh === 'rm') {
         window.PG_UI.exportCsv('stock-rawmaterial-' + dt + '.csv',
-          ['รหัส', 'ชื่อสาร', 'INCI Name', 'หมวดหมู่', 'หน่วย', 'คงคลัง', 'จอง', 'พร้อมใช้', 'จำนวนล็อต', 'สถานะ'],
-          rmFiltered.map(r => [r.code, r.nameTh || '', r.name || '', r.cat || '', r.unit || '', r.onHand, r.reserved, r.available, r.lots, st(r.status)]));
+          ['รหัส', 'ชื่อสาร', 'INCI Name', 'หมวดหมู่', 'หน่วย', 'คงคลัง', 'จอง', 'พร้อมใช้', 'จำนวนล็อต', 'เลขล็อต', 'สถานะ'],
+          rmFiltered.map(r => [r.code, r.nameTh || '', r.name || '', r.cat || '', r.unit || '', r.onHand, r.reserved, r.available, r.lots, lotsOf(r.code).map(l => l.lot).join('; '), st(r.status)]));
       } else {
         window.PG_UI.exportCsv('stock-finishedgoods-' + dt + '.csv',
           ['รหัสสินค้า', 'ชื่อสาร', 'INCI Name', 'ล็อต', 'จำนวน', 'วันหมดอายุ'],
           fgFiltered.map(x => { const p = state.fg.find(g => g.code === x.fg) || {}; return [x.fg, p.nameTh || '', p.name || '', x.lot || '', x.qty, x.expiry || '']; }));
       }
     }
+    // Detailed export: one row per in-stock lot of each (filtered) raw material.
+    function exportStockLots() {
+      const dt = state.today || new Date().toISOString().slice(0, 10);
+      const rows = [];
+      rmFiltered.forEach(r => lotsOf(r.code).forEach(l => {
+        const days = Math.round((new Date(l.expiry) - new Date(state.today)) / 864e5);
+        rows.push([r.code, r.nameTh || '', r.name || '', r.cat || '', l.lot, l.supplier || '', l.remaining, r.unit || '', fmtDate(l.recv), fmtDate(l.expiry), days]);
+      }));
+      window.PG_UI.exportCsv('stock-rawmaterial-lots-' + dt + '.csv',
+        ['รหัสวัตถุดิบ', 'ชื่อสาร', 'INCI Name', 'หมวดหมู่', 'เลขล็อต', 'ผู้ขาย', 'คงเหลือ', 'หน่วย', 'วันรับเข้า', 'วันหมดอายุ', 'เหลืออายุ (วัน)'], rows);
+    }
 
     return React.createElement('div', null,
       React.createElement(PageHead, { title: t('nav.stock'), sub: t('navsec.warehouse'),
-        actions: React.createElement('div', { className: 'row', style: { gap: 10 } },
+        actions: React.createElement('div', { className: 'row', style: { gap: 8 } },
           React.createElement('button', { className: 'btn btn-sm', onClick: exportStock, disabled: shownRows === 0 }, React.createElement(Icon, { name: 'export', size: 14 }), lang === 'th' ? 'ส่งออก CSV' : 'Export CSV'),
+          wh === 'rm' && React.createElement('button', { className: 'btn btn-sm', onClick: exportStockLots, disabled: shownRows === 0 }, React.createElement(Icon, { name: 'export', size: 14 }), lang === 'th' ? 'CSV รายล็อต' : 'CSV by lot'),
           React.createElement('div', { className: 'pill-tabs' },
             React.createElement('button', { className: wh === 'rm' ? 'on' : '', onClick: () => switchWh('rm') }, t('rawmat')),
             React.createElement('button', { className: wh === 'fg' ? 'on' : '', onClick: () => switchWh('fg') }, t('finished')))) }),
