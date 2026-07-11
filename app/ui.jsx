@@ -201,6 +201,17 @@
         style: { position: 'absolute', right: 0, top: 0, bottom: 0, width: 36, opacity: 0, cursor: 'pointer', border: 'none', padding: 0, background: 'transparent' } }));
   }
 
+  // Build a CSV (Excel-friendly: UTF-8 BOM so Thai renders, CRLF line breaks) and download it.
+  function exportCsv(filename, headers, rows) {
+    const esc = (v) => { const s = (v === null || v === undefined) ? '' : String(v); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    const body = [headers].concat(rows).map(r => r.map(esc).join(',')).join('\r\n');
+    const blob = new Blob(['﻿' + body], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  }
+
   window.PG_UI = { Icon, StatusBadge, PriorityBadge, Card, Stat, Progress, Modal, Field,
-    ToastProvider, useToast, PageHead, fmt, fmtDate, parseDMY, DateField, STATUS_COLOR };
+    ToastProvider, useToast, PageHead, fmt, fmtDate, parseDMY, DateField, STATUS_COLOR, exportCsv };
 })();

@@ -165,12 +165,27 @@
     const cats = Array.from(new Set((wh === 'rm' ? state.raw : state.fg).map(x => x.cat).filter(Boolean)));
     const totalRows = wh === 'rm' ? rmAgg.length : (state.fgStock || []).length;
     const shownRows = wh === 'rm' ? rmFiltered.length : fgFiltered.length;
+    const st = (v) => (v || 'A') === 'A' ? (lang === 'th' ? 'ใช้งาน' : 'Active') : (lang === 'th' ? 'ปิดใช้งาน' : 'Inactive');
+    function exportStock() {
+      const dt = state.today || new Date().toISOString().slice(0, 10);
+      if (wh === 'rm') {
+        window.PG_UI.exportCsv('stock-rawmaterial-' + dt + '.csv',
+          ['รหัส', 'ชื่อสาร', 'INCI Name', 'หมวดหมู่', 'หน่วย', 'คงคลัง', 'จอง', 'พร้อมใช้', 'จำนวนล็อต', 'สถานะ'],
+          rmFiltered.map(r => [r.code, r.nameTh || '', r.name || '', r.cat || '', r.unit || '', r.onHand, r.reserved, r.available, r.lots, st(r.status)]));
+      } else {
+        window.PG_UI.exportCsv('stock-finishedgoods-' + dt + '.csv',
+          ['รหัสสินค้า', 'ชื่อสาร', 'INCI Name', 'ล็อต', 'จำนวน', 'วันหมดอายุ'],
+          fgFiltered.map(x => { const p = state.fg.find(g => g.code === x.fg) || {}; return [x.fg, p.nameTh || '', p.name || '', x.lot || '', x.qty, x.expiry || '']; }));
+      }
+    }
 
     return React.createElement('div', null,
       React.createElement(PageHead, { title: t('nav.stock'), sub: t('navsec.warehouse'),
-        actions: React.createElement('div', { className: 'pill-tabs' },
-          React.createElement('button', { className: wh === 'rm' ? 'on' : '', onClick: () => switchWh('rm') }, t('rawmat')),
-          React.createElement('button', { className: wh === 'fg' ? 'on' : '', onClick: () => switchWh('fg') }, t('finished'))) }),
+        actions: React.createElement('div', { className: 'row', style: { gap: 10 } },
+          React.createElement('button', { className: 'btn btn-sm', onClick: exportStock, disabled: shownRows === 0 }, React.createElement(Icon, { name: 'export', size: 14 }), lang === 'th' ? 'ส่งออก CSV' : 'Export CSV'),
+          React.createElement('div', { className: 'pill-tabs' },
+            React.createElement('button', { className: wh === 'rm' ? 'on' : '', onClick: () => switchWh('rm') }, t('rawmat')),
+            React.createElement('button', { className: wh === 'fg' ? 'on' : '', onClick: () => switchWh('fg') }, t('finished')))) }),
       React.createElement('div', { className: 'card', style: { marginBottom: 'var(--gap)', padding: 12 } },
         React.createElement('div', { className: 'row', style: { gap: 10, flexWrap: 'wrap', alignItems: 'center' } },
           React.createElement('input', { className: 'input', style: { flex: '1 1 220px', minWidth: 180 }, placeholder: lang === 'th' ? 'ค้นหา รหัส / ชื่อ' : 'Search code / name', value: q, onChange: ev => setQ(ev.target.value) }),

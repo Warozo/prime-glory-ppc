@@ -82,12 +82,21 @@
       toast(lang === 'th' ? 'ลบเรียบร้อย' : 'Deleted', 'warn');
     }
 
+    function exportItems() {
+      const dt = state.today || new Date().toISOString().slice(0, 10);
+      const stLabel = (v) => (v || 'A') === 'A' ? (lang === 'th' ? 'ใช้งาน' : 'Active') : (lang === 'th' ? 'ปิดใช้งาน' : 'Inactive');
+      window.PG_UI.exportCsv((tab === 'rm' ? 'rawmaterials' : 'finishedgoods') + '-' + dt + '.csv',
+        [tab === 'rm' ? 'RM ' + t('f.code') : 'FG ' + t('f.code'), 'ชื่อสาร', 'INCI Name', 'หน่วย', 'หมวดหมู่', 'สถานะ'],
+        filtered.map(it => [it.code, it.nameTh || '', it.name || '', it.unit || '', it.cat || '', stLabel(it.status)]));
+    }
+
     return React.createElement('div', null,
       React.createElement(PageHead, { title: t('nav.items'), sub: t('navsec.master'),
         actions: React.createElement('div', { className: 'row', style: { gap: 10 } },
           React.createElement('div', { className: 'pill-tabs' },
             React.createElement('button', { className: tab === 'rm' ? 'on' : '', onClick: () => switchTab('rm') }, t('rawmat')),
             React.createElement('button', { className: tab === 'fg' ? 'on' : '', onClick: () => switchTab('fg') }, t('finished'))),
+          React.createElement('button', { className: 'btn btn-sm', onClick: exportItems, disabled: filtered.length === 0 }, React.createElement(Icon, { name: 'export', size: 14 }), lang === 'th' ? 'ส่งออก CSV' : 'Export CSV'),
           React.createElement('button', { className: 'btn btn-pri', onClick: () => setModal({ mode: 'add' }) }, React.createElement(Icon, { name: 'plus', size: 15 }), t('btn.new'))) }),
       React.createElement(ItemFilterBar, { lang, q, setQ, catF, setCatF, statusF, setStatusF, cats, count: filtered.length, total: items.length }),
       React.createElement('div', { className: 'card' },
