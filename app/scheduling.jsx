@@ -245,7 +245,11 @@
               // rows (same sorted order as the drag math so A, B, C stay in order)
               sortedLines.map(ln => {
                 const lineBars = bars.filter(b => b.line === ln.id);
-                const planned = lineBars.reduce((a, b) => a + b.qty, 0);
+                // "แผน" counts only allocations overlapping the visible date window, split produced vs not
+                const winBars = lineBars.filter(b => b.startDay < winEnd && (b.startDay + b.days) > startOffset);
+                const planned = winBars.reduce((a, b) => a + b.qty, 0);
+                const producedSum = winBars.reduce((a, b) => { const l = lotOfBar(b); const p = l ? (l.stations[l.stations.length - 1].cumOut || 0) : 0; return a + Math.min(p, b.qty); }, 0);
+                const remaining = Math.max(0, planned - producedSum);
                 const util = Math.min(100, Math.round(planned / (ln.dailyCap * 3) * 100));
                 return React.createElement('div', { key: ln.id, style: { display: 'flex', position: 'relative', borderBottom: '1px solid var(--border)', minHeight: ROW_H } },
                   React.createElement('div', { style: { width: LABEL_W, flexShrink: 0, padding: '9px 12px', borderRight: '1px solid var(--border)', background: 'var(--surface-2)' } },
@@ -253,7 +257,10 @@
                       React.createElement('span', { style: { width: 8, height: 8, borderRadius: 2, background: LINE_COLORS[ln.id] } }),
                       React.createElement('span', { style: { fontSize: 11.5, fontWeight: 700 } }, ln.name)),
                     React.createElement('div', { className: 'faint mono', style: { fontSize: 9.5, marginTop: 3 } }, '👷 ' + ln.manpower + ' · ' + fmt(ln.dailyCap) + t('u.day')),
-                    React.createElement('div', { style: { fontSize: 9.5, marginTop: 2, color: 'var(--text-muted)' } }, t('db.plan') + ': ' + fmt(planned) + ' ' + t('u.pcs'))),
+                    React.createElement('div', { style: { fontSize: 9.5, marginTop: 2, color: 'var(--text-muted)' } }, t('db.plan') + ' (' + (lang === 'th' ? 'ช่วงนี้' : 'window') + '): ' + fmt(planned) + ' ' + t('u.pcs')),
+                    React.createElement('div', { style: { fontSize: 9, marginTop: 1, display: 'flex', gap: 8, flexWrap: 'wrap' } },
+                      React.createElement('span', { style: { color: 'var(--st-completed)', fontWeight: 600 } }, '● ' + (lang === 'th' ? 'ผลิตแล้ว ' : 'Done ') + fmt(producedSum)),
+                      React.createElement('span', { style: { color: 'var(--warn)', fontWeight: 600 } }, '○ ' + (lang === 'th' ? 'ยังไม่ผลิต ' : 'To do ') + fmt(remaining)))),
                   // day cells (drop target)
                   React.createElement('div', { onDragOver: (e) => { e.preventDefault(); setDropLine(ln.id); }, onDragLeave: () => setDropLine(null),
                     onDrop: (e) => onDrop(e, ln.id),
