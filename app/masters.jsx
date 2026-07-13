@@ -278,16 +278,45 @@
 
   function BomLineModal({ state, t, lang, line, onClose, onSubmit }) {
     const [f, setF] = React.useState({ rm: line.rm, qty: line.qty });
+    const [q, setQ] = React.useState('');
+    const [catF, setCatF] = React.useState('');
     const set = (k, v) => setF(p => ({ ...p, [k]: v }));
     // the unit always follows the raw material's unit from the item master (no manual select)
     const rmUnit = (state.raw.find(r => r.code === f.rm) || {}).unit || 'pcs';
-    return React.createElement(Modal, { title: (line.idx === -1 ? t('bom.addline') : t('bom.editline')), onClose, width: 460,
+    const sel = state.raw.find(r => r.code === f.rm);
+    const cats = Array.from(new Set(state.raw.map(x => x.cat).filter(Boolean)));
+    const needle = q.trim().toLowerCase();
+    const list = state.raw.filter(r => {
+      if (catF && r.cat !== catF) return false;
+      if (needle) { const hay = (r.code + ' ' + (r.nameTh || '') + ' ' + (r.name || '') + ' ' + (r.cat || '')).toLowerCase(); if (hay.indexOf(needle) < 0) return false; }
+      return true;
+    });
+    return React.createElement(Modal, { title: (line.idx === -1 ? t('bom.addline') : t('bom.editline')), onClose, width: 500,
       footer: React.createElement(React.Fragment, null, React.createElement('button', { className: 'btn', onClick: onClose }, t('btn.cancel')),
-        React.createElement('button', { className: 'btn btn-pri', disabled: !f.qty || +f.qty <= 0, onClick: () => onSubmit({ idx: line.idx, rm: f.rm, qty: f.qty, unit: rmUnit }) }, t('btn.save'))) },
+        React.createElement('button', { className: 'btn btn-pri', disabled: !f.rm || !f.qty || +f.qty <= 0, onClick: () => onSubmit({ idx: line.idx, rm: f.rm, qty: f.qty, unit: rmUnit }) }, t('btn.save'))) },
       React.createElement('div', { className: 'grid g-2', style: { gap: 12 } },
         React.createElement('div', { style: { gridColumn: 'span 2' } }, React.createElement(Field, { label: t('rawmat'), required: true },
-          React.createElement('select', { className: 'select', value: f.rm, onChange: e => set('rm', e.target.value) },
-            state.raw.map(r => React.createElement('option', { key: r.code, value: r.code }, r.code + ' · ' + (lang === 'th' ? r.nameTh : r.name) + ' (' + (r.unit || '') + ')'))))),
+          // search + category filter
+          React.createElement('div', { className: 'row', style: { gap: 8, marginBottom: 8 } },
+            React.createElement('input', { className: 'input', style: { flex: 1, minWidth: 0 }, autoFocus: true, placeholder: lang === 'th' ? 'ค้นหา รหัส / ชื่อ' : 'Search code / name', value: q, onChange: e => setQ(e.target.value) }),
+            React.createElement('select', { className: 'select', style: { width: 150, flexShrink: 0 }, value: catF, onChange: e => setCatF(e.target.value) },
+              [React.createElement('option', { key: '_all', value: '' }, lang === 'th' ? 'ทุกหมวดหมู่' : 'All categories')].concat(cats.map(c => React.createElement('option', { key: c, value: c }, c))))),
+          sel && React.createElement('div', { className: 'faint', style: { fontSize: 11, marginBottom: 6 } }, (lang === 'th' ? 'เลือกอยู่: ' : 'Selected: '),
+            React.createElement('b', { className: 'mono', style: { color: 'var(--primary)' } }, sel.code), ' · ', (lang === 'th' ? sel.nameTh : sel.name)),
+          // scrollable clickable list
+          React.createElement('div', { style: { maxHeight: 240, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--surface-2)' } },
+            list.length === 0
+              ? React.createElement('div', { className: 'empty', style: { fontSize: 12, padding: '22px 0' } }, lang === 'th' ? 'ไม่พบวัตถุดิบ' : 'No materials found')
+              : list.map(r => {
+                  const on = r.code === f.rm;
+                  return React.createElement('button', { key: r.code, type: 'button', onClick: () => set('rm', r.code),
+                    style: { width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 11px', cursor: 'pointer', border: 'none', borderBottom: '1px solid var(--border)', background: on ? 'var(--primary-tint)' : 'transparent' } },
+                    React.createElement('span', { className: 'mono', style: { fontSize: 11, fontWeight: 700, color: 'var(--primary)', minWidth: 80, flexShrink: 0 } }, r.code),
+                    React.createElement('span', { style: { flex: 1, minWidth: 0, fontWeight: 600, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, lang === 'th' ? r.nameTh : r.name),
+                    r.cat && React.createElement('span', { className: 'badge badge-soft', style: { fontSize: 9.5, flexShrink: 0 } }, r.cat),
+                    React.createElement('span', { className: 'mono faint', style: { fontSize: 10.5, flexShrink: 0, minWidth: 22, textAlign: 'right' } }, r.unit || ''),
+                    on && React.createElement(Icon, { name: 'check', size: 13, style: { color: 'var(--primary)', flexShrink: 0 } }));
+                })))),
         React.createElement(Field, { label: t('bom.qtyper'), required: true }, React.createElement('input', { className: 'input mono', type: 'number', step: 'any', value: f.qty, onChange: e => set('qty', e.target.value), placeholder: '0' })),
         React.createElement(Field, { label: t('f.unit') + (lang === 'th' ? ' (จากรายการสินค้า)' : ' (from item master)') },
           React.createElement('div', { className: 'input mono', style: { display: 'flex', alignItems: 'center', background: 'var(--surface-2)', color: 'var(--text-muted)', fontWeight: 600 } }, rmUnit))));
