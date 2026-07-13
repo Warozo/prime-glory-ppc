@@ -186,19 +186,25 @@
   }
 
   // Date input that DISPLAYS DD/MM/YYYY but stores ISO. value/onChange use ISO strings.
+  // Clicking ANYWHERE on the field opens the calendar (via showPicker); the text is still typeable.
   function DateField({ value, onChange, className, style, placeholder }) {
     const [text, setText] = React.useState(fmtDate(value));
+    const nativeRef = React.useRef(null);
     React.useEffect(() => { setText(fmtDate(value)); }, [value]);
     const onText = (v) => { setText(v); const iso = parseDMY(v); if (iso) onChange(iso); else if (!v) onChange(''); };
+    const openPicker = () => {
+      const el = nativeRef.current; if (!el) return;
+      try { el.showPicker(); } catch (e) { try { el.focus(); el.click(); } catch (e2) { /* ignore */ } }
+    };
     return React.createElement('div', { style: { position: 'relative', ...(style || {}) } },
       React.createElement('input', { className: (className || 'input') + ' mono', value: text, placeholder: placeholder || 'DD/MM/YYYY',
-        onChange: (e) => onText(e.target.value), style: { paddingRight: 34, width: '100%' } }),
+        onChange: (e) => onText(e.target.value), onClick: openPicker, style: { paddingRight: 34, width: '100%', cursor: 'pointer' } }),
       React.createElement('span', { style: { position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-faint)', pointerEvents: 'none', display: 'grid', placeItems: 'center' } },
         React.createElement(Icon, { name: 'schedule', size: 15 })),
-      // transparent native date input overlaying the icon — clicking it opens the OS calendar
-      React.createElement('input', { type: 'date', value: value || '', onChange: (e) => onChange(e.target.value),
-        title: '', 'aria-label': 'calendar',
-        style: { position: 'absolute', right: 0, top: 0, bottom: 0, width: 36, opacity: 0, cursor: 'pointer', border: 'none', padding: 0, background: 'transparent' } }));
+      // hidden native date input — anchors the calendar popup + binds the value (never blocks clicks)
+      React.createElement('input', { ref: nativeRef, type: 'date', value: value || '', onChange: (e) => onChange(e.target.value),
+        tabIndex: -1, 'aria-hidden': 'true',
+        style: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, width: '100%', opacity: 0, pointerEvents: 'none', border: 'none', padding: 0, background: 'transparent' } }));
   }
 
   // Build a CSV (Excel-friendly: UTF-8 BOM so Thai renders, CRLF line breaks) and download it.
