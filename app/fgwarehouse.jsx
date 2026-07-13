@@ -16,12 +16,23 @@
     const accepted = state.fgPending.filter(f => f.status === 'accepted');
     const [fpq, setFpq] = React.useState('');
     const [fpStatus, setFpStatus] = React.useState('');
+    // Date filter — trims only FINISHED items (received/rejected); pending always shows (active queue).
+    const daysAgo = (n) => { const d = new Date(state.today); d.setDate(d.getDate() - (n - 1)); return d.toISOString().slice(0, 10); };
+    const [fpPreset, setFpPreset] = React.useState(30);
+    const [fpFrom, setFpFrom] = React.useState(() => daysAgo(30));
+    const [fpTo, setFpTo] = React.useState(() => state.today);
+    const setPresetDays = (n) => { setFpPreset(n); setFpFrom(daysAgo(n)); setFpTo(state.today); };
+    const setAllDates = () => { setFpPreset(0); setFpFrom(''); setFpTo(''); };
+    const itemDate = (f) => { const rs = f.receipts || []; return (rs.length ? rs[rs.length - 1].date : f.completed) || f.completed || ''; };
+    const inWindow = (f) => { if (!fpFrom && !fpTo) return true; if (f.status === 'pending') return true; const d = itemDate(f); return !d || ((!fpFrom || d >= fpFrom) && (!fpTo || d <= fpTo)); };
     const fpNeedle = fpq.trim().toLowerCase();
     const fpFiltered = state.fgPending.filter(f => {
+      if (!inWindow(f)) return false;
       if (fpStatus && f.status !== fpStatus) return false;
       if (fpNeedle) { const hay = ((f.id || '') + ' ' + (f.po || '') + ' ' + D.fgName(state, f.fg, lang)).toLowerCase(); if (hay.indexOf(fpNeedle) < 0) return false; }
       return true;
     });
+    const fpHidden = (!fpFrom && !fpTo) ? 0 : state.fgPending.filter(f => f.status !== 'pending' && !inWindow(f)).length;
 
     function received(f) { return (f.receipts || []).reduce((a, r) => a + r.qty, 0); }
     function producedOf(f) { return f.produced != null ? f.produced : f.qty; }
@@ -77,14 +88,21 @@
       e('div', { className: 'card' },
         e('div', { className: 'card-h' }, e(Icon, { name: 'fg', size: 15, style: { color: 'var(--primary)' } }), e('h3', null, t('status.pending')),
           e('span', { className: 'badge badge-soft', style: { marginLeft: 'auto' } }, fpFiltered.length + ' / ' + state.fgPending.length)),
-        state.fgPending.length > 0 && e('div', { style: { padding: '10px 14px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' } },
+        e('div', { style: { padding: '10px 14px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' } },
           e('input', { className: 'input', style: { flex: '1 1 200px', minWidth: 160 }, placeholder: lang === 'th' ? 'ค้นหา FR# / ใบสั่งผลิต / สินค้า' : 'Search FR# / PO / product', value: fpq, onChange: ev => setFpq(ev.target.value) }),
           e('select', { className: 'select', style: { width: 160 }, value: fpStatus, onChange: ev => setFpStatus(ev.target.value) },
             e('option', { value: '' }, lang === 'th' ? 'ทุกสถานะ' : 'All statuses'),
             e('option', { value: 'pending' }, t('status.pending')),
             e('option', { value: 'accepted' }, t('status.accepted')),
             e('option', { value: 'rejected' }, lang === 'th' ? 'ปฏิเสธ' : 'Rejected')),
-          (fpq || fpStatus) && e('button', { className: 'btn btn-sm', onClick: () => { setFpq(''); setFpStatus(''); } }, lang === 'th' ? 'ล้าง' : 'Clear')),
+          e('div', { className: 'pill-tabs' },
+            [7, 15, 30, 90].map(n => e('button', { key: n, className: fpPreset === n ? 'on' : '', onClick: () => setPresetDays(n) }, n + (lang === 'th' ? ' วัน' : 'd'))).concat([
+              e('button', { key: 'all', className: (fpPreset === 0 && !fpFrom && !fpTo) ? 'on' : '', onClick: setAllDates }, lang === 'th' ? 'ทั้งหมด' : 'All')])),
+          e(DateField, { value: fpFrom, onChange: v => { setFpFrom(v); setFpPreset(0); }, style: { width: 130 } }),
+          e('span', { className: 'faint' }, '–'),
+          e(DateField, { value: fpTo, onChange: v => { setFpTo(v); setFpPreset(0); }, style: { width: 130 } }),
+          fpHidden > 0 && e('span', { className: 'badge', style: { color: 'var(--text-muted)', background: 'var(--surface-3)', fontSize: 11 } }, lang === 'th' ? 'ซ่อนที่รับเข้าแล้วเก่ากว่า ' + fpHidden : fpHidden + ' older hidden'),
+          e('button', { className: 'btn btn-sm', onClick: () => { setFpq(''); setFpStatus(''); setPresetDays(30); } }, lang === 'th' ? 'ล้าง' : 'Clear')),
         e('table', { className: 'tbl' },
           e('thead', null, e('tr', null,
             e('th', null, 'FR#'), e('th', null, t('f.po')), e('th', null, t('f.product')),
