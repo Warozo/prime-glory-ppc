@@ -23,8 +23,12 @@
     const [selId, setSelId] = React.useState(lots[0] ? lots[0].id : null);
     const [report, setReport] = React.useState(null); // {lotId, stepIdx}
     const [reworkReq, setReworkReq] = React.useState(null); // {lotId, stepIdx, pending, station}
+    const [lineF, setLineF] = React.useState('');
+    const [statusF, setStatusF] = React.useState('producing'); // default: show in-progress lots (finished ones don't pile up)
 
-    const lot = lots.find(l => l.id === selId) || lots[0];
+    // filter the lot list by production line + status (producing / done)
+    const visibleLots = lots.filter(l => (!lineF || l.line === lineF) && (statusF === 'done' ? isComplete(l) : !isComplete(l)));
+    const lot = visibleLots.find(l => l.id === selId) || visibleLots[0] || null;
 
     function cumIn(l, i) { return i === 0 ? l.qty : l.prog[i - 1]; }
     function wipAt(l, i) { return cumIn(l, i) - l.prog[i]; }
@@ -120,22 +124,33 @@
       toast(lang === 'th' ? 'ส่ง Rework กลับเป็นผลผลิตดีแล้ว' : 'Rework returned to good output');
     }
 
-    // Sort: active lots first, completed lots pushed to the bottom
-    const sortedLots = lots.slice().sort((a, b) => (isComplete(a) ? 1 : 0) - (isComplete(b) ? 1 : 0));
+    // the lot list shows only the filtered lots (line + status)
+    const sortedLots = visibleLots;
     return React.createElement('div', null,
       React.createElement(PageHead, { title: t('sf.title'), sub: t('sf.sub') }),
       React.createElement('div', { style: { display: 'grid', gridTemplateColumns: '230px 1fr', gap: 14, alignItems: 'start' } },
 
         // Lot list
         React.createElement('div', { className: 'card' },
-          React.createElement('div', { className: 'card-h' }, React.createElement(Icon, { name: 'layers', size: 15, style: { color: 'var(--primary)' } }), React.createElement('h3', null, t('sf.lot'))),
+          React.createElement('div', { className: 'card-h' }, React.createElement(Icon, { name: 'layers', size: 15, style: { color: 'var(--primary)' } }), React.createElement('h3', null, t('sf.lot')),
+            React.createElement('span', { className: 'badge badge-soft', style: { marginLeft: 'auto', fontSize: 10 } }, visibleLots.length + ' / ' + lots.length)),
+          // filter: production line + status (producing / completed)
+          React.createElement('div', { style: { padding: '8px 10px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 7 } },
+            React.createElement('select', { className: 'select', style: { width: '100%' }, value: lineF, onChange: e => setLineF(e.target.value) },
+              [React.createElement('option', { key: '_all', value: '' }, lang === 'th' ? 'ทุกสายการผลิต' : 'All lines')].concat(
+                state.lines.map(ln => React.createElement('option', { key: ln.id, value: ln.id }, ln.name)))),
+            React.createElement('div', { className: 'pill-tabs', style: { display: 'flex' } },
+              React.createElement('button', { style: { flex: 1 }, className: statusF === 'producing' ? 'on' : '', onClick: () => setStatusF('producing') }, lang === 'th' ? 'กำลังผลิต' : 'Producing'),
+              React.createElement('button', { style: { flex: 1 }, className: statusF === 'done' ? 'on' : '', onClick: () => setStatusF('done') }, lang === 'th' ? 'ผลิตเสร็จสิ้น' : 'Completed'))),
           React.createElement('div', { style: { padding: 8, display: 'flex', flexDirection: 'column', gap: 7 } },
             lots.length === 0 && React.createElement('div', { className: 'empty', style: { fontSize: 11 } }, React.createElement(Icon, { name: 'shopfloor', size: 20 }), React.createElement('div', { style: { marginTop: 6 } }, lang === 'th' ? 'ยังไม่มีล็อตการผลิต' : 'No production lots yet'), React.createElement('div', { className: 'faint', style: { fontSize: 10, marginTop: 3 } }, lang === 'th' ? 'จัดใบสั่งลงตารางการผลิตก่อน' : 'Schedule an order first')),
+            lots.length > 0 && visibleLots.length === 0 && React.createElement('div', { className: 'empty', style: { fontSize: 11 } }, React.createElement(Icon, { name: 'filter', size: 18 }), React.createElement('div', { style: { marginTop: 6 } }, lang === 'th' ? 'ไม่พบล็อตตามตัวกรอง' : 'No lots match the filter')),
             sortedLots.map(l => {
               const pct = Math.round(l.prog[l.prog.length - 1] / l.qty * 100);
               const done = isComplete(l);
+              const on = lot && lot.id === l.id;
               return React.createElement('button', { key: l.id, onClick: () => setSelId(l.id),
-                style: { textAlign: 'left', background: selId === l.id ? 'var(--primary-tint)' : 'var(--surface-2)', border: '1px solid ' + (selId === l.id ? 'var(--primary)' : 'var(--border)'), borderRadius: 7, padding: 9, cursor: 'pointer' } },
+                style: { textAlign: 'left', background: on ? 'var(--primary-tint)' : 'var(--surface-2)', border: '1px solid ' + (on ? 'var(--primary)' : 'var(--border)'), borderRadius: 7, padding: 9, cursor: 'pointer' } },
                 React.createElement('div', { className: 'row', style: { justifyContent: 'space-between' } },
                   React.createElement('span', { className: 'mono', style: { fontSize: 11.5, fontWeight: 700, color: 'var(--primary)' } }, l.id),
                   done ? React.createElement(Icon, { name: 'checkcircle', size: 14, style: { color: 'var(--ok)' } }) : React.createElement('span', { className: 'mono', style: { fontSize: 10.5, fontWeight: 700 } }, pct + '%')),
