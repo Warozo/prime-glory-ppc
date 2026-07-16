@@ -14,7 +14,7 @@
     // Derive view-model from shared state so changes persist across navigation
     const lots = state.lotsWip.map(l => ({
       id: l.id, po: l.po, order: l.order, fg: l.fg, qty: l.qty, line: l.line, wf: l.wf,
-      steps: l.stations.map(st => ({ key: st.step, name: st.name, nameTh: st.nameTh, type: st.type })),
+      steps: l.stations.map(st => ({ key: st.step, name: st.name, nameTh: st.nameTh, type: st.type, note: st.note || '' })),
       prog: l.stations.map(st => st.cumOut),
       defects: l.stations.map(st => st.cumDefect || 0),
       rework: l.stations.map(st => st.reworkDone || 0),
@@ -29,6 +29,11 @@
     // filter the lot list by production line + status (producing / done)
     const visibleLots = lots.filter(l => (!lineF || l.line === lineF) && (statusF === 'done' ? isComplete(l) : !isComplete(l)));
     const lot = visibleLots.find(l => l.id === selId) || visibleLots[0] || null;
+    // per-station free-text note (saved on the WIP lot's station)
+    function saveNote(stepIdx, text) {
+      setState(prev => ({ ...prev, lotsWip: prev.lotsWip.map(l => l.id === lot.id ? { ...l, stations: l.stations.map((st, k) => k === stepIdx ? { ...st, note: text } : st) } : l) }));
+      toast(lang === 'th' ? 'บันทึกหมายเหตุแล้ว' : 'Note saved');
+    }
 
     function cumIn(l, i) { return i === 0 ? l.qty : l.prog[i - 1]; }
     function wipAt(l, i) { return cumIn(l, i) - l.prog[i]; }
@@ -221,7 +226,8 @@
                               React.createElement('span', { className: 'mono', style: { fontWeight: 700 } },
                                 React.createElement('span', { style: { color: x.rework ? 'var(--primary)' : 'var(--ok)' } }, (x.rework ? '↻' : '+') + fmt(x.qty)),
                                 x.defect > 0 && React.createElement('span', { style: { color: 'var(--danger)', marginLeft: 5 } }, '✕' + fmt(x.defect))))));
-                        })())),
+                        })(),
+                        React.createElement(StationNote, { note: st.note, lang, onSave: (txt) => saveNote(i, txt) }))),
                     null);
                 })))),
 
@@ -264,6 +270,21 @@
     return React.createElement('div', { className: 'row', style: { justifyContent: 'space-between', margin: '2px 0' } },
       React.createElement('span', { style: { fontSize: 10, color: 'var(--text-faint)' } }, label),
       React.createElement('span', { className: 'mono', style: { fontWeight: big ? 700 : 600, fontSize: big ? 15 : 11.5, color } }, window.PG_UI.fmt(v)));
+  }
+
+  // Editable free-text note at the bottom of each station card
+  function StationNote({ note, lang, onSave }) {
+    const [text, setText] = React.useState(note || '');
+    const [dirty, setDirty] = React.useState(false);
+    React.useEffect(() => { setText(note || ''); setDirty(false); }, [note]);
+    const e = React.createElement;
+    return e('div', { style: { marginTop: 8, paddingTop: 7, borderTop: '1px dashed var(--border)' } },
+      e('div', { className: 'row', style: { justifyContent: 'space-between', marginBottom: 3 } },
+        e('span', { style: { fontSize: 9.5, fontWeight: 700, color: 'var(--text-faint)' } }, lang === 'th' ? 'หมายเหตุ' : 'Note'),
+        dirty && e('button', { className: 'btn btn-sm btn-pri', style: { fontSize: 8.5, padding: '1px 8px' }, onClick: () => { onSave(text); setDirty(false); } }, lang === 'th' ? 'บันทึก' : 'Save')),
+      e('textarea', { className: 'input', value: text, rows: 2, placeholder: lang === 'th' ? 'พิมพ์หมายเหตุ...' : 'Add a note...',
+        onChange: (ev) => { setText(ev.target.value); setDirty(true); },
+        style: { fontSize: 10, width: '100%', minHeight: 30, resize: 'vertical', lineHeight: 1.35 } }));
   }
 
   // On-screen number pad for shop-floor entry (digits, Clear, backspace, Enter)
