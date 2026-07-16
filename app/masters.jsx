@@ -164,6 +164,9 @@
     const [draft, setDraft] = React.useState(null); // { lines } while creating a new version (reorder session)
     const dragIdx = React.useRef(null);
     const bom = state.boms[fgCode];
+    // a material may be used only once per formula
+    const usedRms = (bom ? bom.lines : []).map(l => l.rm);
+    const firstFreeRm = ((state.raw.find(r => usedRms.indexOf(r.code) < 0)) || {}).code || '';
     // leaving a draft when switching product
     React.useEffect(() => { setDraft(null); }, [fgCode]);
     const req = fgCode ? D.bomRequirement(state, fgCode, calcQty) : [];
@@ -190,6 +193,10 @@
       return boms;
     }
     function saveLine(line) {
+      // one material may appear only once per formula
+      if ((bom ? bom.lines : []).some((l, i) => l.rm === line.rm && i !== line.idx)) {
+        toast(lang === 'th' ? 'วัตถุดิบนี้มีในสูตรแล้ว' : 'This material is already in the formula', 'warn'); return;
+      }
       setState(prev => {
         const boms = ensureBom(prev);
         const lines = boms[fgCode].lines;
@@ -251,7 +258,9 @@
                       React.createElement('button', { className: 'btn btn-sm btn-pri', onClick: confirmVersion }, React.createElement(Icon, { name: 'checkcircle', size: 13 }), lang === 'th' ? 'บันทึกยืนยันสูตรผลิต' : 'Confirm & save formula'))
                   : React.createElement('div', { className: 'card-h-actions row', style: { gap: 6 } },
                       React.createElement('button', { className: 'btn btn-sm', onClick: enterVersion, title: t('bom.newver') }, React.createElement(Icon, { name: 'edit', size: 13 }), t('bom.newver')),
-                      React.createElement('button', { className: 'btn btn-sm btn-pri', onClick: () => setEditLine({ idx: -1, rm: state.raw[0].code, qty: '', unit: 'g' }) }, React.createElement(Icon, { name: 'plus', size: 13 }), t('bom.addline')))),
+                      React.createElement('button', { className: 'btn btn-sm btn-pri', disabled: !firstFreeRm,
+                        title: firstFreeRm ? null : (lang === 'th' ? 'วัตถุดิบทุกตัวถูกใช้ในสูตรนี้แล้ว' : 'Every material is already in this formula'),
+                        onClick: () => setEditLine({ idx: -1, rm: firstFreeRm, qty: '', unit: 'g' }) }, React.createElement(Icon, { name: 'plus', size: 13 }), t('bom.addline')))),
             React.createElement('table', { className: 'tbl' },
               React.createElement('thead', null, React.createElement('tr', null, draft && React.createElement('th', { style: { width: 28 } }, ''), React.createElement('th', null, t('f.code')), React.createElement('th', null, t('rawmat')), React.createElement('th', { className: 'num' }, t('bom.qtyper')), React.createElement('th', null, t('f.unit')), React.createElement('th', { style: { width: 80 } }, ''))),
               React.createElement('tbody', null, (function () {
@@ -287,10 +296,12 @@
                 React.createElement('td', { className: 'num mono' }, fmt(r.onHand) + ' ' + r.unit),
                 React.createElement('td', { className: 'num mono', style: { fontWeight: 700, color: r.short > 0 ? 'var(--danger)' : 'var(--ok)' } }, r.short > 0 ? '-' + fmt(r.short) : '✓')))))))),
       fgEdit && React.createElement(ItemModal, { tab: 'fg', t, lang, edit: fgEdit, onClose: () => setFgEdit(null), onSubmit: saveFg }),
-      editLine && React.createElement(BomLineModal, { state, t, lang, line: editLine, onClose: () => setEditLine(null), onSubmit: saveLine }));
+      editLine && React.createElement(BomLineModal, { state, t, lang, line: editLine,
+        used: (bom ? bom.lines : []).filter((_, i) => i !== editLine.idx).map(l => l.rm),
+        onClose: () => setEditLine(null), onSubmit: saveLine }));
   }
 
-  function BomLineModal({ state, t, lang, line, onClose, onSubmit }) {
+  function BomLineModal({ state, t, lang, line, used, onClose, onSubmit }) {
     const [f, setF] = React.useState({ rm: line.rm, qty: line.qty });
     const [q, setQ] = React.useState('');
     const [catF, setCatF] = React.useState('');
@@ -301,6 +312,7 @@
     const cats = Array.from(new Set(state.raw.map(x => x.cat).filter(Boolean)));
     const needle = q.trim().toLowerCase();
     const list = state.raw.filter(r => {
+      if (used && used.indexOf(r.code) >= 0) return false; // already used in this formula
       if (catF && r.cat !== catF) return false;
       if (needle) { const hay = (r.code + ' ' + (r.nameTh || '') + ' ' + (r.name || '') + ' ' + (r.cat || '')).toLowerCase(); if (hay.indexOf(needle) < 0) return false; }
       return true;
