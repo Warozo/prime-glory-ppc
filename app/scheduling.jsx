@@ -238,7 +238,11 @@
                 React.createElement('div', { style: { width: LABEL_W, flexShrink: 0, padding: '8px 12px', fontSize: 10.5, fontWeight: 700, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '.5px' } }, t('f.line')),
                 Array.from({ length: dayCount }).map((_, i) => {
                   const dt = dayDate(i); const wd = dt.getDay();
-                  return React.createElement('div', { key: i, style: { width: DAY_W, flexShrink: 0, textAlign: 'center', padding: '6px 0', borderLeft: '1px solid var(--border)', background: i === todayIdx ? 'var(--primary-tint)' : (wd === 0 || wd === 6) ? 'var(--surface-3)' : 'transparent' } },
+                  // month label shows at the start of the range and whenever the month changes
+                  const showMonth = i === 0 || dt.getMonth() !== dayDate(i - 1).getMonth();
+                  const monthLabel = dt.toLocaleDateString(lang === 'th' ? 'th-TH' : 'en-US', { month: 'short' });
+                  return React.createElement('div', { key: i, style: { width: DAY_W, flexShrink: 0, textAlign: 'center', padding: '5px 0 6px', borderLeft: '1px solid var(--border)', background: i === todayIdx ? 'var(--primary-tint)' : (wd === 0 || wd === 6) ? 'var(--surface-3)' : 'transparent' } },
+                    React.createElement('div', { style: { fontSize: 8.5, fontWeight: 700, color: 'var(--primary)', height: 12, lineHeight: '12px', whiteSpace: 'nowrap', overflow: 'visible' } }, showMonth ? monthLabel : ''),
                     React.createElement('div', { style: { fontSize: 9, color: 'var(--text-faint)' } }, dt.toLocaleDateString(lang === 'th' ? 'th-TH' : 'en-US', { weekday: 'short' })),
                     React.createElement('div', { style: { fontSize: 12, fontWeight: 700, color: i === todayIdx ? 'var(--primary)' : 'var(--text)' } }, dt.getDate()));
                 })),
