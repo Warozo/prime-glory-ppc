@@ -35,10 +35,32 @@
       if (state.receipts.some(r => r.id === id)) { toast(lang === 'th' ? 'เลขที่ GR ซ้ำ' : 'GR number already exists', 'warn'); return; }
       const lotId = D.genId('L');
       setState(prev => ({ ...prev,
-        receipts: [{ id, recv: form.recv, supplier: form.supplier, rm: form.rm, qty: +form.qty, lot: form.lot, expiry: form.expiry }, ...prev.receipts],
+        receipts: [{ id, lotId, recv: form.recv, supplier: form.supplier, rm: form.rm, qty: +form.qty, lot: form.lot, expiry: form.expiry }, ...prev.receipts],
         lots: [{ id: lotId, rm: form.rm, supplier: form.supplier, qty: +form.qty, remaining: +form.qty, lot: form.lot, expiry: form.expiry, recv: form.recv }, ...prev.lots],
       }));
       toast(t('toast.received')); setShow(false);
+    }
+
+    // ---- correct a mis-keyed lot number / expiry on a receipt ----
+    const [editRec, setEditRec] = React.useState(null);
+    // the lot a receipt created: new records carry lotId; older ones are matched on rm + lot + recv date
+    const lotOfReceipt = (s, rec) => s.lots.find(l => rec.lotId ? l.id === rec.lotId : (l.rm === rec.rm && l.lot === rec.lot && l.recv === rec.recv));
+    function saveEdit(form) {
+      const newLot = (form.lot || '').trim();
+      if (!newLot || !form.expiry) { toast(lang === 'th' ? 'กรอกเลขล็อตและวันหมดอายุ' : 'Enter lot number and expiry', 'warn'); return; }
+      setState(prev => {
+        const rec0 = prev.receipts.find(r => r.id === editRec.id); if (!rec0) return prev;
+        const oldLot = rec0.lot;
+        const lotRec = lotOfReceipt(prev, rec0);
+        return { ...prev,
+          receipts: prev.receipts.map(r => r.id === rec0.id ? { ...r, lot: newLot, expiry: form.expiry } : r),
+          // the stock lot drives FEFO/issue, so it must follow the correction
+          lots: prev.lots.map(l => (lotRec && l.id === lotRec.id) ? { ...l, lot: newLot, expiry: form.expiry } : l),
+          // keep already-issued history pointing at the corrected lot number
+          issues: (prev.issues || []).map(tx => (tx.rm === rec0.rm && tx.lot === oldLot) ? { ...tx, lot: newLot } : tx),
+        };
+      });
+      toast(t('toast.saved')); setEditRec(null);
     }
 
     return React.createElement('div', null,
@@ -65,7 +87,8 @@
             React.createElement('table', { className: 'tbl' },
               React.createElement('thead', null, React.createElement('tr', null,
                 ['id', 'date', 'supplier', 'item', 'qty', 'lot', 'expiry'].map((k, i) => React.createElement('th', { key: k, className: i === 4 ? 'num' : '' },
-                  k === 'id' ? 'GR#' : t('f.' + (k === 'date' ? 'date' : k === 'item' ? 'name' : k === 'qty' ? 'qty' : k))) ))),
+                  k === 'id' ? 'GR#' : t('f.' + (k === 'date' ? 'date' : k === 'item' ? 'name' : k === 'qty' ? 'qty' : k)))).concat([
+                    React.createElement('th', { key: '_act', style: { width: 40 } }, '')]))),
               React.createElement('tbody', null,
                 recFiltered.map(r => React.createElement('tr', { key: r.id },
                   React.createElement('td', { className: 'mono', style: { fontWeight: 600, color: 'var(--primary)' } }, r.id),
@@ -74,7 +97,8 @@
                   React.createElement('td', null, React.createElement('div', { style: { fontWeight: 600 } }, D.rmName(state, r.rm, lang)), React.createElement('div', { className: 'mono faint', style: { fontSize: 10 } }, r.rm)),
                   React.createElement('td', { className: 'num mono', style: { fontWeight: 600 } }, fmt(r.qty)),
                   React.createElement('td', { className: 'mono' }, r.lot),
-                  React.createElement('td', { className: 'mono faint' }, r.expiry)))))) ),
+                  React.createElement('td', { className: 'mono faint' }, r.expiry),
+                  React.createElement('td', null, React.createElement('button', { className: 'btn btn-sm btn-ghost btn-icon', title: lang === 'th' ? 'แก้ไขเลขล็อต / วันหมดอายุ' : 'Correct lot / expiry', onClick: () => setEditRec(r) }, React.createElement(Icon, { name: 'edit', size: 13 })))))))) ),
         React.createElement('div', { className: 'span-5' },
           React.createElement('div', { className: 'card' },
             React.createElement('div', { className: 'card-h' }, React.createElement(Icon, { name: 'box', size: 15, style: { color: 'var(--primary)' } }), React.createElement('h3', null, t('wh.batches'))),
@@ -89,7 +113,32 @@
                       React.createElement('td', { className: 'num mono', style: { fontWeight: 600 } }, fmt(l.remaining) + ' ' + D.rmUnit(state, l.rm)),
                       React.createElement('td', null, React.createElement('span', { className: 'badge', style: { color: days <= 14 ? 'var(--danger)' : days <= 30 ? 'var(--warn)' : 'var(--text-muted)', background: days <= 14 ? 'var(--danger-tint)' : days <= 30 ? 'var(--warn-tint)' : 'var(--surface-3)' } }, fmtDate(l.expiry) + ' · ' + days + (lang === 'th' ? ' วัน' : 'd'))));
                   })))))) ),
-      show && React.createElement(ReceiveModal, { state, t, lang, onClose: () => setShow(false), onSubmit: receive }));
+      show && React.createElement(ReceiveModal, { state, t, lang, onClose: () => setShow(false), onSubmit: receive }),
+      editRec && React.createElement(ReceiptEditModal, { rec: editRec, state, t, lang, onClose: () => setEditRec(null), onSubmit: saveEdit }));
+  }
+
+  // Correct a mis-keyed lot number / expiry on an existing receipt
+  function ReceiptEditModal({ rec, state, t, lang, onClose, onSubmit }) {
+    const [f, setF] = React.useState({ lot: rec.lot || '', expiry: rec.expiry || '' });
+    const set = (k, v) => setF(p => ({ ...p, [k]: v }));
+    const changed = f.lot.trim() !== (rec.lot || '') || f.expiry !== (rec.expiry || '');
+    return React.createElement(Modal, { title: (lang === 'th' ? 'แก้ไขเลขล็อต / วันหมดอายุ · ' : 'Correct lot / expiry · ') + rec.id, onClose, width: 440,
+      footer: React.createElement(React.Fragment, null,
+        React.createElement('button', { className: 'btn', onClick: onClose }, t('btn.cancel')),
+        React.createElement('button', { className: 'btn btn-pri', disabled: !f.lot.trim() || !f.expiry || !changed, onClick: () => onSubmit(f) }, React.createElement(Icon, { name: 'check', size: 14 }), t('btn.save'))) },
+      React.createElement('div', { style: { background: 'var(--surface-2)', borderRadius: 8, padding: '10px 12px', marginBottom: 14, fontSize: 12 } },
+        React.createElement('div', { className: 'row', style: { justifyContent: 'space-between' } },
+          React.createElement('span', { className: 'faint' }, t('rawmat')), React.createElement('b', null, D.rmName(state, rec.rm, lang))),
+        React.createElement('div', { className: 'row', style: { justifyContent: 'space-between', marginTop: 4 } },
+          React.createElement('span', { className: 'faint' }, t('f.qty')), React.createElement('b', { className: 'mono' }, fmt(rec.qty) + ' ' + D.rmUnit(state, rec.rm)))),
+      React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 12 } },
+        React.createElement(Field, { label: t('f.lot'), required: true },
+          React.createElement('input', { className: 'input mono', value: f.lot, autoFocus: true, onChange: e => set('lot', e.target.value) })),
+        React.createElement(Field, { label: t('f.expiry'), required: true },
+          React.createElement(DateField, { value: f.expiry, onChange: v => set('expiry', v) })),
+        React.createElement('div', { className: 'faint', style: { fontSize: 11, display: 'flex', gap: 6 } },
+          React.createElement(Icon, { name: 'alert', size: 12 }),
+          lang === 'th' ? 'จะอัปเดตล็อตในคลัง (มีผลกับ FEFO/การเบิก) และประวัติการเบิกที่อ้างล็อตนี้ให้ตรงกัน' : 'Also updates the stock lot (FEFO/issue) and any issue records referring to it')));
   }
 
   function ReceiveModal({ state, t, lang, onClose, onSubmit }) {
