@@ -248,7 +248,7 @@
               React.createElement('td', null, React.createElement('span', { className: 'badge badge-soft' }, r.cat)),
               selfMade ? dash : React.createElement('td', { className: 'num mono', style: { fontWeight: 600 } }, fmt(r.onHand) + ' ' + r.unit),
               selfMade ? dash : React.createElement('td', { className: 'num mono', style: { color: r.reserved > 0 ? 'var(--warn)' : 'var(--text-faint)' } }, r.reserved > 0 ? fmt(r.reserved) : '–'),
-              selfMade ? React.createElement('td', { className: 'num mono faint', style: { fontSize: 10.5 } }, lang === 'th' ? 'ไม่อั้น' : 'unlimited') : React.createElement('td', { className: 'num mono', style: { fontWeight: 600, color: r.available <= 0 ? 'var(--danger)' : 'var(--ok)' } }, fmt(r.available)),
+              selfMade ? React.createElement('td', { className: 'num mono faint', style: { fontSize: 10.5 } }, lang === 'th' ? 'ไม่จำกัด' : 'unlimited') : React.createElement('td', { className: 'num mono', style: { fontWeight: 600, color: r.available <= 0 ? 'var(--danger)' : 'var(--ok)' } }, fmt(r.available)),
               selfMade ? dash : React.createElement('td', { className: 'num mono' }, React.createElement('span', { className: 'badge badge-soft' }, r.lots)),
               React.createElement('td', null, selfMade
                 ? React.createElement('button', { className: 'btn btn-sm', onClick: (ev) => { ev.stopPropagation(); toggleReady(r.code); }, style: { fontSize: 10, padding: '2px 9px', fontWeight: 700, color: ready ? 'var(--ok)' : 'var(--danger)', borderColor: ready ? 'var(--ok)' : 'var(--danger)' }, title: lang === 'th' ? 'กดสลับ พร้อม/ไม่พร้อม' : 'toggle ready' }, ready ? (lang === 'th' ? '● พร้อม' : '● Ready') : (lang === 'th' ? '○ ไม่พร้อม' : '○ Not ready'))
