@@ -324,24 +324,30 @@
   function Bar({ bar, state, lang, t, startOffset, readOnly, active, started, completed, produced, onStart, onPointerDown }) {
     const col = completed ? 'var(--ok)' : (LINE_COLORS[bar.line] || '#2d5bd7');
     const pct = bar.qty > 0 ? Math.min(100, Math.round((produced || 0) / bar.qty * 100)) : 0;
+    const valText = started ? (fmt(produced || 0) + '/' + fmt(bar.qty) + ' (' + pct + '%)') : fmt(bar.qty);
+    const valColor = started ? (completed ? 'var(--ok)' : 'var(--primary)') : 'var(--text-muted)';
+    const barBg = 'color-mix(in srgb,' + col + ' 14%, white)';
     return React.createElement('div', {
       onPointerDown: (e) => onPointerDown(e, bar, 'move'),
       // width follows the duration exactly (can be a single day); the taller row gives room for text
       style: { position: 'absolute', left: (bar.startDay - (startOffset || 0)) * DAY_W + 3, top: 7, width: bar.days * DAY_W - 6, height: ROW_H - 14,
-        background: 'color-mix(in srgb,' + col + ' 14%, white)', border: '1.5px solid ' + col, borderLeft: '3px solid ' + col,
-        borderRadius: 6, padding: '5px 9px', cursor: 'grab', boxShadow: active ? '0 4px 14px rgba(18,32,56,.18)' : 'var(--shadow-sm)',
-        zIndex: active ? 5 : 1, overflow: 'hidden', userSelect: 'none', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 2, transition: active ? 'none' : 'box-shadow .15s' } },
-      React.createElement('div', { className: 'row', style: { justifyContent: 'space-between', gap: 4 } },
-        React.createElement('span', { className: 'mono', style: { fontSize: 10, fontWeight: 700, color: col, display: 'flex', alignItems: 'center', gap: 3 } },
-          started && React.createElement(Icon, { name: 'lock', size: 9 }), bar.id),
-        React.createElement('span', { className: 'mono', style: { fontSize: 9.5, fontWeight: started ? 700 : 400, color: started ? (completed ? 'var(--ok)' : 'var(--primary)') : 'var(--text-muted)' } },
-          started ? (fmt(produced || 0) + '/' + fmt(bar.qty) + ' (' + pct + '%)') : fmt(bar.qty))),
-      React.createElement('div', { className: 'row', style: { justifyContent: 'space-between', gap: 6 } },
-        React.createElement('span', { style: { fontSize: 10.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 } }, D.fgName(state, bar.fg, lang)),
+        background: barBg, border: '1.5px solid ' + col, borderLeft: '3px solid ' + col,
+        borderRadius: 6, cursor: 'grab', boxShadow: active ? '0 4px 14px rgba(18,32,56,.18)' : 'var(--shadow-sm)',
+        zIndex: active ? 5 : 1, userSelect: 'none', transition: active ? 'none' : 'box-shadow .15s' } },
+      // sticky-left info — SO id + value + product name; stays pinned at the left while scrolling a wide bar
+      React.createElement('div', { style: { position: 'sticky', left: LABEL_W + 8, display: 'inline-flex', flexDirection: 'column', gap: 1, padding: '5px 8px', maxWidth: Math.max(60, bar.days * DAY_W - 6), background: barBg, borderRadius: 5, pointerEvents: 'none' } },
+        React.createElement('div', { className: 'row', style: { gap: 6 } },
+          React.createElement('span', { className: 'mono', style: { fontSize: 10, fontWeight: 700, color: col, display: 'flex', alignItems: 'center', gap: 3, whiteSpace: 'nowrap' } },
+            started && React.createElement(Icon, { name: 'lock', size: 9 }), bar.id),
+          React.createElement('span', { className: 'mono', style: { fontSize: 9, fontWeight: started ? 700 : 400, color: valColor, whiteSpace: 'nowrap' } }, valText)),
+        React.createElement('span', { style: { fontSize: 10.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, D.fgName(state, bar.fg, lang))),
+      // right end ("ปลาย") — value + start / status
+      React.createElement('div', { style: { position: 'absolute', right: 12, top: 6, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 } },
+        React.createElement('span', { className: 'mono', style: { fontSize: 9.5, fontWeight: started ? 700 : 400, color: valColor, whiteSpace: 'nowrap' } }, valText),
         (started || readOnly)
-          ? React.createElement('span', { style: { fontSize: 8.5, fontWeight: 700, color: completed ? 'var(--ok)' : 'var(--primary)', display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 } }, started ? React.createElement(React.Fragment, null, React.createElement(Icon, { name: completed ? 'check' : 'play', size: 8 }), completed ? t('status.completed') : t('sch.producing')) : null)
+          ? React.createElement('span', { style: { fontSize: 8.5, fontWeight: 700, color: completed ? 'var(--ok)' : 'var(--primary)', display: 'flex', alignItems: 'center', gap: 2 } }, started ? React.createElement(React.Fragment, null, React.createElement(Icon, { name: completed ? 'check' : 'play', size: 8 }), completed ? t('status.completed') : t('sch.producing')) : null)
           : React.createElement('button', { onPointerDown: (e) => e.stopPropagation(), onClick: (e) => { e.stopPropagation(); onStart(bar); },
-              style: { flexShrink: 0, fontSize: 8.5, fontWeight: 700, color: '#fff', background: col, border: 'none', borderRadius: 4, padding: '2px 6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 2 } },
+              style: { fontSize: 8.5, fontWeight: 700, color: '#fff', background: col, border: 'none', borderRadius: 4, padding: '2px 6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 2 } },
               React.createElement(Icon, { name: 'play', size: 8 }), t('sch.start'))),
       // resize handle
       React.createElement('div', { onPointerDown: (e) => onPointerDown(e, bar, 'resize'),
