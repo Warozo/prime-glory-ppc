@@ -401,14 +401,19 @@
     const s = state;
     const DateField = window.PG_UI.DateField, Stat = window.PG_UI.Stat;
     const [day, setDay] = React.useState(s.today);
+    const [lineF, setLineF] = React.useState('');
+    const [statusF, setStatusF] = React.useState('producing'); // default: in-progress orders (finished ones don't pile up)
     const cols = HOUR_SLOTS;
     const LINE_COLORS = { A: '#2d5bd7', B: '#7b5cd9', C: '#1f8a5b', D: '#e08a1e', E: '#cf3b3b', F: '#0e7490', G: '#9333ea' };
+    const lotDone = (lot) => { const last = lot.stations[lot.stations.length - 1]; return !!last && (last.cumOut || 0) >= lot.qty; };
+    const includeLot = (lot) => (!lineF || lot.line === lineF) && (statusF === 'done' ? lotDone(lot) : !lotDone(lot));
 
     // break down by EACH QA station (a process can have several QA steps)
     const cum = {};      // line -> po -> stationIdx -> { defect, rework, name, fg }
     const hourly = {};   // line -> po -> stationIdx -> hourKey -> defect qty (selected day)
     let totDefect = 0, totRework = 0;
     s.lotsWip.forEach(lot => {
+      if (!includeLot(lot)) return;
       let lotHasQA = false;
       lot.stations.forEach((st, idx) => {
         if (st.type !== 'qa') return;
@@ -464,7 +469,13 @@
         React.createElement('div', { className: 'card-h' },
           React.createElement(Icon, { name: 'qc', size: 15, style: { color: 'var(--danger)' } }),
           React.createElement('h3', null, lang === 'th' ? 'Defect รายชั่วโมง' : 'Hourly defects'),
-          React.createElement('div', { className: 'card-h-actions row', style: { gap: 10 } },
+          React.createElement('div', { className: 'card-h-actions row', style: { gap: 8, flexWrap: 'wrap' } },
+            React.createElement('select', { className: 'select', style: { width: 148 }, value: lineF, onChange: e => setLineF(e.target.value) },
+              [React.createElement('option', { key: '_all', value: '' }, lang === 'th' ? 'ทุกสายการผลิต' : 'All lines')].concat(
+                s.lines.map(ln => React.createElement('option', { key: ln.id, value: ln.id }, ln.name)))),
+            React.createElement('div', { className: 'pill-tabs' },
+              React.createElement('button', { className: statusF === 'producing' ? 'on' : '', onClick: () => setStatusF('producing') }, lang === 'th' ? 'กำลังผลิต' : 'Producing'),
+              React.createElement('button', { className: statusF === 'done' ? 'on' : '', onClick: () => setStatusF('done') }, lang === 'th' ? 'ผลิตเสร็จสิ้น' : 'Completed')),
             React.createElement('button', { className: 'btn btn-sm', onClick: exportQA, disabled: !hasData }, React.createElement(Icon, { name: 'export', size: 14 }), lang === 'th' ? 'ส่งออก CSV' : 'Export CSV'),
             React.createElement('span', { className: 'faint', style: { fontSize: 11.5 } }, lang === 'th' ? 'เลือกวัน' : 'Day'),
             React.createElement(DateField, { value: day, onChange: setDay, style: { width: 150 } }))),
