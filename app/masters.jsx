@@ -122,8 +122,8 @@
 
   function ItemModal({ tab, t, lang, edit, onClose, onSubmit }) {
     const [f, setF] = React.useState(edit
-      ? { code: edit.code, name: edit.name, nameTh: edit.nameTh, unit: edit.unit, cat: edit.cat, status: edit.status || 'A' }
-      : { code: '', name: '', nameTh: '', unit: 'pcs', cat: '', status: 'A' });
+      ? { code: edit.code, name: edit.name, nameTh: edit.nameTh, unit: edit.unit, cat: edit.cat, status: edit.status || 'A', packaging: (edit.cat || '').toLowerCase() === 'packaging' }
+      : { code: '', name: '', nameTh: '', unit: 'pcs', cat: '', status: 'A', packaging: false });
     const set = (k, v) => setF(p => ({ ...p, [k]: v }));
     return React.createElement(Modal, { title: (edit ? t('btn.edit') : t('btn.new')) + ' · ' + (tab === 'rm' ? t('rawmat') : t('finished')), onClose, width: 480,
       footer: React.createElement(React.Fragment, null, React.createElement('button', { className: 'btn', onClick: onClose }, t('btn.cancel')),
@@ -131,8 +131,13 @@
       React.createElement('div', { className: 'grid g-2', style: { gap: 12 } },
         React.createElement(Field, { label: t('f.code'), required: true }, React.createElement('input', { className: 'input mono', value: f.code, disabled: !!edit, onChange: e => set('code', e.target.value), placeholder: tab === 'rm' ? 'RM014' : 'FG006' })),
         React.createElement(Field, { label: t('f.unit'), required: true }, React.createElement('select', { className: 'select', value: f.unit, onChange: e => set('unit', e.target.value) }, ['pcs', 'kg', 'g', 'L', 'ml'].map(u => React.createElement('option', { key: u }, u)))),
-        React.createElement('div', { style: { gridColumn: 'span 2' } }, React.createElement(Field, { label: (lang === 'th' ? 'ชื่อสาร' : 'Substance name'), required: true }, React.createElement('input', { className: 'input', value: f.nameTh, onChange: e => set('nameTh', e.target.value) }))),
-        React.createElement('div', { style: { gridColumn: 'span 2' } }, React.createElement(Field, { label: 'INCI Name' }, React.createElement('input', { className: 'input', value: f.name, onChange: e => set('name', e.target.value) }))),
+        React.createElement('div', { style: { gridColumn: 'span 2' } }, React.createElement(Field, { label: (tab === 'rm' ? (lang === 'th' ? 'ชื่อสาร / ชื่อวัตถุดิบ' : 'Substance / material name') : (lang === 'th' ? 'ชื่อสาร' : 'Substance name')), required: true }, React.createElement('input', { className: 'input', value: f.nameTh, onChange: e => set('nameTh', e.target.value) }))),
+        tab === 'rm' && React.createElement('div', { style: { gridColumn: 'span 2' } },
+          React.createElement('label', { style: { display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12.5, fontWeight: 600 } },
+            React.createElement('input', { type: 'checkbox', checked: !!f.packaging, onChange: e => setF(p => e.target.checked ? { ...p, packaging: true, name: '', cat: 'Packaging' } : { ...p, packaging: false, cat: p.cat === 'Packaging' ? '' : p.cat }) }),
+            React.createElement('span', null, lang === 'th' ? 'Packaging (บรรจุภัณฑ์ — ไม่มี INCI)' : 'Packaging (no INCI Name)'))),
+        React.createElement('div', { style: { gridColumn: 'span 2' } }, React.createElement(Field, { label: 'INCI Name', hint: f.packaging ? (lang === 'th' ? 'ปิดสำหรับบรรจุภัณฑ์' : 'disabled for packaging') : null },
+          React.createElement('input', { className: 'input', value: f.packaging ? '' : f.name, disabled: !!f.packaging, onChange: e => set('name', e.target.value), style: f.packaging ? { background: 'var(--surface-3)', color: 'var(--text-faint)', cursor: 'not-allowed' } : null }))),
         React.createElement(Field, { label: t('f.category') }, React.createElement('input', { className: 'input', value: f.cat, onChange: e => set('cat', e.target.value), placeholder: tab === 'rm' ? 'Active / Base / Packaging' : 'Serum / Foundation / Lip' })),
         React.createElement(Field, { label: t('f.status') }, React.createElement('select', { className: 'select', value: f.status, onChange: e => set('status', e.target.value) },
           React.createElement('option', { value: 'A' }, t('f.active')),
