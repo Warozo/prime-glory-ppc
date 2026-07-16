@@ -121,6 +121,14 @@
     if (d1 < d0) { const tmp = d0; d0 = d1; d1 = tmp; }
     const dates = [];
     for (let d = new Date(d0); d <= d1 && dates.length < 60; d.setDate(d.getDate() + 1)) dates.push(d.toISOString().slice(0, 10));
+    // group the dates by month for a spanning month header row
+    const monthGroups = [];
+    dates.forEach(iso => {
+      const d = new Date(iso); const key = d.getFullYear() + '-' + d.getMonth();
+      const last = monthGroups[monthGroups.length - 1];
+      if (last && last.key === key) last.count++;
+      else monthGroups.push({ key: key, count: 1, mo: d.getMonth(), label: d.toLocaleDateString(lang === 'th' ? 'th-TH' : 'en-US', { month: 'long' }) + ' ' + d.getFullYear() });
+    });
 
     // per line → per production order → per day, from final-step output.
     // (one order can appear under several lines, supporting split production.)
@@ -175,10 +183,17 @@
       hasOut
         ? React.createElement('div', { style: { overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 8 } },
             React.createElement('table', { className: 'tbl', style: { minWidth: Math.max(620, 220 + dates.length * 58) } },
-              React.createElement('thead', null, React.createElement('tr', null,
-                React.createElement('th', { style: { position: 'sticky', left: 0, zIndex: 2, background: 'var(--surface-2)', minWidth: 210 } }, lang === 'th' ? 'สายการผลิต / ใบสั่งผลิต' : 'Line / Production order'),
-                dates.map(iso => React.createElement('th', { key: iso, className: 'num', style: { whiteSpace: 'nowrap' } }, fmtDate(iso).slice(0, 5))),
-                React.createElement('th', { className: 'num', style: { background: 'var(--surface-2)', whiteSpace: 'nowrap' } }, lang === 'th' ? 'รวม' : 'Total'))),
+              React.createElement('thead', null,
+                // month band row — one cell per month spanning its days, label pinned to the left
+                React.createElement('tr', null,
+                  React.createElement('th', { style: { position: 'sticky', left: 0, zIndex: 2, background: 'var(--surface-2)', minWidth: 210 } }, ''),
+                  monthGroups.map(g => React.createElement('th', { key: g.key, colSpan: g.count, style: { textAlign: 'left', padding: 0, borderLeft: '2px solid var(--border-strong)', background: g.mo % 2 ? 'color-mix(in srgb, var(--primary) 8%, var(--surface-2))' : 'var(--surface-2)' } },
+                    React.createElement('div', { style: { position: 'sticky', left: 214, display: 'inline-block', fontSize: 10.5, fontWeight: 700, color: 'var(--primary)', padding: '4px 9px', whiteSpace: 'nowrap' } }, g.label))),
+                  React.createElement('th', { style: { background: 'var(--surface-2)' } }, '')),
+                React.createElement('tr', null,
+                  React.createElement('th', { style: { position: 'sticky', left: 0, zIndex: 2, background: 'var(--surface-2)', minWidth: 210 } }, lang === 'th' ? 'สายการผลิต / ใบสั่งผลิต' : 'Line / Production order'),
+                  dates.map((iso, i) => { const d = new Date(iso); const monthStart = i > 0 && d.getMonth() !== new Date(dates[i - 1]).getMonth(); return React.createElement('th', { key: iso, className: 'num', style: { whiteSpace: 'nowrap', borderLeft: monthStart ? '2px solid var(--border-strong)' : undefined, background: d.getMonth() % 2 ? 'color-mix(in srgb, var(--primary) 8%, transparent)' : undefined } }, fmtDate(iso).slice(0, 5)); }),
+                  React.createElement('th', { className: 'num', style: { background: 'var(--surface-2)', whiteSpace: 'nowrap' } }, lang === 'th' ? 'รวม' : 'Total'))),
               React.createElement('tbody', null,
                 showLines.reduce((rows, ln) => {
                   const ln0 = s.lines.find(l => l.id === ln);
