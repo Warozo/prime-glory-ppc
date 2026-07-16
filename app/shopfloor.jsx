@@ -226,13 +226,12 @@
                               React.createElement('span', { className: 'mono', style: { fontWeight: 700 } },
                                 React.createElement('span', { style: { color: x.rework ? 'var(--primary)' : 'var(--ok)' } }, (x.rework ? '↻' : '+') + fmt(x.qty)),
                                 x.defect > 0 && React.createElement('span', { style: { color: 'var(--danger)', marginLeft: 5 } }, '✕' + fmt(x.defect))))));
-                        })(),
-                        React.createElement(StationNote, { note: st.note, lang, onSave: (txt) => saveNote(i, txt) }))),
+                        })())),
                     null);
                 })))),
 
           // Output log — hourly matrix (steps × hour slots) for a selected day
-          React.createElement(HourlyOutputTable, { lot, today: state.today, t, lang })))
+          React.createElement(HourlyOutputTable, { lot, today: state.today, t, lang, onSaveNote: saveNote })))
       ,
       report && (function () {
         const rl = lots.find(l => l.id === report.lotId); const i = report.stepIdx;
@@ -272,19 +271,16 @@
       React.createElement('span', { className: 'mono', style: { fontWeight: big ? 700 : 600, fontSize: big ? 15 : 11.5, color } }, window.PG_UI.fmt(v)));
   }
 
-  // Editable free-text note at the bottom of each station card
-  function StationNote({ note, lang, onSave }) {
+  // Editable note cell (one per process column) at the bottom of the output-log table.
+  // Saves on blur when the text changed.
+  function NoteCell({ note, onSave }) {
     const [text, setText] = React.useState(note || '');
-    const [dirty, setDirty] = React.useState(false);
-    React.useEffect(() => { setText(note || ''); setDirty(false); }, [note]);
-    const e = React.createElement;
-    return e('div', { style: { marginTop: 8, paddingTop: 7, borderTop: '1px dashed var(--border)' } },
-      e('div', { className: 'row', style: { justifyContent: 'space-between', marginBottom: 3 } },
-        e('span', { style: { fontSize: 9.5, fontWeight: 700, color: 'var(--text-faint)' } }, lang === 'th' ? 'หมายเหตุ' : 'Note'),
-        dirty && e('button', { className: 'btn btn-sm btn-pri', style: { fontSize: 8.5, padding: '1px 8px' }, onClick: () => { onSave(text); setDirty(false); } }, lang === 'th' ? 'บันทึก' : 'Save')),
-      e('textarea', { className: 'input', value: text, rows: 2, placeholder: lang === 'th' ? 'พิมพ์หมายเหตุ...' : 'Add a note...',
-        onChange: (ev) => { setText(ev.target.value); setDirty(true); },
-        style: { fontSize: 10, width: '100%', minHeight: 30, resize: 'vertical', lineHeight: 1.35 } }));
+    React.useEffect(() => { setText(note || ''); }, [note]);
+    return React.createElement('td', { style: { padding: 4, verticalAlign: 'top' } },
+      React.createElement('textarea', { className: 'input', value: text, rows: 2, placeholder: '—',
+        onChange: (ev) => setText(ev.target.value),
+        onBlur: () => { if ((text || '') !== (note || '')) onSave(text); },
+        style: { fontSize: 10, width: '100%', minWidth: 74, minHeight: 30, resize: 'vertical', lineHeight: 1.3 } }));
   }
 
   // On-screen number pad for shop-floor entry (digits, Clear, backspace, Enter)
@@ -366,7 +362,7 @@
     { k: '18', label: '18.00-19.00', start: 18 },
     { k: '19', label: '19.00-20.00', start: 19 },
   ];
-  function HourlyOutputTable({ lot, today, t, lang }) {
+  function HourlyOutputTable({ lot, today, t, lang, onSaveNote }) {
     const DateField = window.PG_UI.DateField;
     const [day, setDay] = React.useState(today);
     // collect distinct days present in the log (for quick info)
@@ -412,7 +408,11 @@
               lot.steps.map((st, si) => {
                 const v = (matrix[si] || {})[c.k];
                 return React.createElement('td', { key: si, className: 'num mono', style: { color: v ? 'var(--ok)' : 'var(--text-faint)', fontWeight: v ? 700 : 400 } }, v ? fmt(v) : '');
-              }))))) ),
+              }))),
+            // note row at the very bottom — one editable note per process column
+            React.createElement('tr', { style: { borderTop: '2px solid var(--border-strong)' } },
+              React.createElement('td', { style: { position: 'sticky', left: 0, zIndex: 1, background: 'var(--surface-2)', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' } }, lang === 'th' ? 'หมายเหตุ' : 'Note'),
+              lot.steps.map((st, si) => React.createElement(NoteCell, { key: si, note: st.note, onSave: (txt) => onSaveNote(si, txt) }))))) ),
       dayTotal === 0 && React.createElement('div', { className: 'faint', style: { fontSize: 11.5, textAlign: 'center', padding: '12px 0' } }, lang === 'th' ? 'ยังไม่มีการบันทึกผลผลิตในวันที่เลือก' : 'No output reported on the selected day'));
   }
 
