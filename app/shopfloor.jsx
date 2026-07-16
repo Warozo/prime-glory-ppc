@@ -382,11 +382,23 @@
       dayTotal += x.qty;
     });
     const cols = HOUR_SLOTS;
+    const stepLabel = (st, si) => (si + 1) + '. ' + (st.type === 'qa' ? 'QA ' : '') + (lang === 'th' ? st.nameTh : st.name);
+    const hasNotes = lot.steps.some(st => ((st.notes || {})[day] || '').trim());
+    // export the SELECTED DAY only: time-slot rows x process columns, plus the note row
+    function exportLog() {
+      const headers = [lang === 'th' ? 'ช่วงเวลา' : 'Time'].concat(lot.steps.map(stepLabel));
+      const rows = cols.map(c => [c.k === 'lunch' ? (lang === 'th' ? 'พักเที่ยง' : 'Lunch') : c.label]
+        .concat(lot.steps.map((st, si) => (matrix[si] || {})[c.k] || 0)));
+      rows.push([lang === 'th' ? 'รวม' : 'Total'].concat(lot.steps.map((st, si) => cols.reduce((a, c) => a + ((matrix[si] || {})[c.k] || 0), 0))));
+      rows.push([lang === 'th' ? 'หมายเหตุ' : 'Note'].concat(lot.steps.map(st => (st.notes || {})[day] || '')));
+      window.PG_UI.exportCsv('output-log-' + lot.id + '-' + day + '.csv', headers, rows);
+    }
     return React.createElement('div', { className: 'card' },
       React.createElement('div', { className: 'card-h' },
         React.createElement(Icon, { name: 'clock', size: 15, style: { color: 'var(--primary)' } }),
         React.createElement('h3', null, t('sf.outputlog')),
         React.createElement('div', { className: 'card-h-actions row', style: { gap: 10 } },
+          React.createElement('button', { className: 'btn btn-sm', onClick: exportLog, disabled: dayTotal === 0 && !hasNotes }, React.createElement(Icon, { name: 'export', size: 14 }), lang === 'th' ? 'ส่งออก CSV' : 'Export CSV'),
           React.createElement('span', { className: 'faint', style: { fontSize: 11.5 } }, t('sf.pickday')),
           React.createElement(DateField, { value: day, onChange: setDay, style: { width: 150 } }),
           React.createElement('span', { className: 'badge badge-soft mono' }, fmt(dayTotal) + ' ' + t('u.units')))),
