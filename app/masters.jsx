@@ -55,6 +55,7 @@
       setState(prev => {
         const list = prev[key].slice();
         const rec = { name: f.name || f.nameTh, nameTh: f.nameTh || f.name, unit: f.unit, cat: f.cat, status: f.status || 'A' };
+        if (key === 'raw') { rec.selfMade = !!f.selfMade; rec.ready = f.selfMade ? (f.ready !== false) : true; }
         if (modal.mode === 'edit') {
           const i = list.findIndex(x => x.code === modal.item.code);
           if (i !== -1) list[i] = { ...list[i], ...rec };
@@ -122,8 +123,8 @@
 
   function ItemModal({ tab, t, lang, edit, onClose, onSubmit }) {
     const [f, setF] = React.useState(edit
-      ? { code: edit.code, name: edit.name, nameTh: edit.nameTh, unit: edit.unit, cat: edit.cat, status: edit.status || 'A', packaging: (edit.cat || '').toLowerCase() === 'packaging' }
-      : { code: '', name: '', nameTh: '', unit: 'pcs', cat: '', status: 'A', packaging: false });
+      ? { code: edit.code, name: edit.name, nameTh: edit.nameTh, unit: edit.unit, cat: edit.cat, status: edit.status || 'A', packaging: (edit.cat || '').toLowerCase() === 'packaging', selfMade: !!edit.selfMade, ready: edit.ready !== false }
+      : { code: '', name: '', nameTh: '', unit: 'pcs', cat: '', status: 'A', packaging: false, selfMade: false, ready: true });
     const set = (k, v) => setF(p => ({ ...p, [k]: v }));
     return React.createElement(Modal, { title: (edit ? t('btn.edit') : t('btn.new')) + ' · ' + (tab === 'rm' ? t('rawmat') : t('finished')), onClose, width: 480,
       footer: React.createElement(React.Fragment, null, React.createElement('button', { className: 'btn', onClick: onClose }, t('btn.cancel')),
@@ -139,6 +140,14 @@
         React.createElement('div', { style: { gridColumn: 'span 2' } }, React.createElement(Field, { label: 'INCI Name', hint: f.packaging ? (lang === 'th' ? 'ปิดสำหรับบรรจุภัณฑ์' : 'disabled for packaging') : null },
           React.createElement('input', { className: 'input', value: f.packaging ? '' : f.name, disabled: !!f.packaging, onChange: e => set('name', e.target.value), style: f.packaging ? { background: 'var(--surface-3)', color: 'var(--text-faint)', cursor: 'not-allowed' } : null }))),
         React.createElement(Field, { label: t('f.category') }, React.createElement('input', { className: 'input', value: f.cat, onChange: e => set('cat', e.target.value), placeholder: tab === 'rm' ? 'Active / Base / Packaging' : 'Serum / Foundation / Lip' })),
+        tab === 'rm' && React.createElement('div', { style: { gridColumn: 'span 2', borderTop: '1px solid var(--border)', paddingTop: 10 } },
+          React.createElement('label', { style: { display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12.5, fontWeight: 600 } },
+            React.createElement('input', { type: 'checkbox', checked: !!f.selfMade, onChange: e => set('selfMade', e.target.checked) }),
+            React.createElement('span', null, lang === 'th' ? 'ผลิตเอง (ไม่นับสต๊อก — เบิกตามสถานะ พร้อม/ไม่พร้อม)' : 'Self-produced (no stock — issue by ready status)')),
+          f.selfMade && React.createElement('div', { className: 'row', style: { gap: 6, marginTop: 8, alignItems: 'center' } },
+            React.createElement('button', { type: 'button', className: 'btn btn-sm' + (f.ready !== false ? ' btn-pri' : ''), onClick: () => set('ready', true) }, lang === 'th' ? '● พร้อม' : '● Ready'),
+            React.createElement('button', { type: 'button', className: 'btn btn-sm', style: f.ready === false ? { background: 'var(--danger)', borderColor: 'var(--danger)', color: '#fff' } : null, onClick: () => set('ready', false) }, lang === 'th' ? '○ ไม่พร้อม' : '○ Not ready'),
+            React.createElement('span', { className: 'faint', style: { fontSize: 10.5, marginLeft: 4 } }, f.ready === false ? (lang === 'th' ? 'เบิก/จองตัดผลิตไม่ได้' : 'cannot issue/reserve') : (lang === 'th' ? 'เบิกตัดผลิตได้ไม่อั้น' : 'issue unlimited')))),
         React.createElement(Field, { label: t('f.status') }, React.createElement('select', { className: 'select', value: f.status, onChange: e => set('status', e.target.value) },
           React.createElement('option', { value: 'A' }, t('f.active')),
           React.createElement('option', { value: 'I' }, t('f.inactive'))))));

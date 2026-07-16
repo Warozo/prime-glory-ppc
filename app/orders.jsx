@@ -39,7 +39,7 @@
         const next = { ...prev, orders: prev.orders.map(x => x.id === o.id ? { ...x, status: pv } : x) };
         if (o.status === 'reserved') {
           const reserved = { ...(prev.reservedByRm || {}) };
-          D.bomRequirement(prev, o.fg, o.qty).forEach(r => { reserved[r.rm] = +(Math.max(0, (reserved[r.rm] || 0) - r.need).toFixed(2)); });
+          D.bomRequirement(prev, o.fg, o.qty).forEach(r => { if (r.selfMade) return; reserved[r.rm] = +(Math.max(0, (reserved[r.rm] || 0) - r.need).toFixed(2)); });
           next.reservedByRm = reserved;
           next.prodOrders = prev.prodOrders.filter(p => !(p.order === o.id && p.status === 'reserved'));
         }
@@ -61,7 +61,7 @@
         const reserved = { ...(prev.reservedByRm || {}) };
         // release the outstanding reservation only if nothing was issued yet
         if (poRec && poRec.status === 'reserved') {
-          D.bomRequirement(prev, o.fg, o.qty).forEach(r => { reserved[r.rm] = +(Math.max(0, (reserved[r.rm] || 0) - r.need).toFixed(2)); });
+          D.bomRequirement(prev, o.fg, o.qty).forEach(r => { if (r.selfMade) return; reserved[r.rm] = +(Math.max(0, (reserved[r.rm] || 0) - r.need).toFixed(2)); });
         }
         // return physically-issued stock to its lots and drop those issue txns
         const lots = prev.lots.map(l => ({ ...l }));
@@ -97,7 +97,7 @@
         const next = { ...prev, orders: prev.orders.map(x => x.id === o.id ? { ...x, status: nx } : x) };
         if (nx === 'reserved') {
           const reserved = { ...(prev.reservedByRm || {}) };
-          D.bomRequirement(prev, o.fg, o.qty).forEach(r => { reserved[r.rm] = +(((reserved[r.rm] || 0) + r.need).toFixed(2)); });
+          D.bomRequirement(prev, o.fg, o.qty).forEach(r => { if (r.selfMade) return; reserved[r.rm] = +(((reserved[r.rm] || 0) + r.need).toFixed(2)); });
           next.reservedByRm = reserved;
           const wf = D.workflowForLine(prev, null);
           const id = (poId && poId.trim()) || D.genId('PO');

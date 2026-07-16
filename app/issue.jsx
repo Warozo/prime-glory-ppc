@@ -30,6 +30,8 @@
 
     // Commit a PO issue: picks = { rmCode: [{lotId, qty}] }
     function commitPO(picks) {
+      const blocked = req.filter(r => r.selfMade && !r.ready);
+      if (blocked.length) { toast((lang === 'th' ? 'วัตถุดิบผลิตเองยังไม่พร้อม เบิกไม่ได้: ' : 'Self-produced material not ready: ') + blocked.map(x => x.rm).join(', '), 'warn'); return; }
       setState(prev => {
         const lots = prev.lots.map(l => ({ ...l }));
         const reserved = { ...(prev.reservedByRm || {}) };
@@ -49,6 +51,8 @@
           const r = req.find(x => x.rm === rm);
           if (r) reserved[rm] = +(Math.max(0, (reserved[rm] || 0) - r.need).toFixed(2));
         });
+        // self-produced (ready) materials are issued without lots — recorded, not deducted
+        req.forEach(r => { if (r.selfMade && r.ready) txns.push({ id: D.genId('ISS'), date: prev.today, time, type: 'po', ref: poId, order: po.order, rm: r.rm, lot: (lang === 'th' ? 'ผลิตเอง' : 'self-made'), qty: r.need, unit: r.unit, reason: '' }); });
         const prodOrders = prev.prodOrders.map(p => p.id === poId ? { ...p, status: 'issued' } : p);
         return { ...prev, lots, reservedByRm: reserved, prodOrders, issues: [...txns, ...(prev.issues || [])] };
       });
@@ -199,16 +203,23 @@
 
   // Lot picker for PO: one allocation per required RM
   function LotPickerPO({ state, t, lang, req, onClose, onSubmit }) {
+    const physReq = req.filter(r => !r.selfMade);   // materials that need lot allocation
+    const selfReq = req.filter(r => r.selfMade);     // self-produced — no lots, only ready status
+    const blocked = selfReq.some(r => !r.ready);
     const initial = {};
-    req.forEach(r => { const lots = D.rmLotsFEFO(state, r.rm); initial[r.rm] = fefoAlloc(lots, r.need); });
+    physReq.forEach(r => { const lots = D.rmLotsFEFO(state, r.rm); initial[r.rm] = fefoAlloc(lots, r.need); });
     const [alloc, setAlloc] = React.useState(initial);
     const submitGuard = React.useRef(false);
     const setQ = (rm, lotId, v) => setAlloc(a => ({ ...a, [rm]: { ...a[rm], [lotId]: Math.max(0, +v || 0) } }));
     const allocSum = (rm) => Object.values(alloc[rm] || {}).reduce((s, q) => s + q, 0);
-    const valid = req.every(r => Math.abs(allocSum(r.rm) - r.need) < 0.001);
+    const valid = !blocked && physReq.every(r => Math.abs(allocSum(r.rm) - r.need) < 0.001);
     const submit = () => { if (!valid || submitGuard.current) return; submitGuard.current = true; onSubmit(alloc); };
 
-    const body = req.map(r => {
+    const selfBody = selfReq.map(r => e('div', { key: r.rm, className: 'row', style: { justifyContent: 'space-between', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 12px', marginBottom: 8, background: r.ready ? 'var(--ok-tint)' : 'var(--danger-tint)' } },
+      e('div', null, e('b', { style: { fontSize: 13 } }, D.rmName(state, r.rm, lang)), e('span', { className: 'mono faint', style: { fontSize: 10, marginLeft: 6 } }, r.rm), e('span', { className: 'badge badge-soft', style: { fontSize: 9, marginLeft: 6 } }, lang === 'th' ? 'ผลิตเอง' : 'Self-made')),
+      e('span', { className: 'badge', style: { color: r.ready ? 'var(--ok)' : 'var(--danger)', background: '#fff', fontSize: 10.5, fontWeight: 700 } }, r.ready ? (lang === 'th' ? '● พร้อม · ' + fmt(r.need) + ' ' + r.unit : '● Ready · ' + fmt(r.need)) : (lang === 'th' ? '○ ไม่พร้อม — เบิกไม่ได้' : '○ Not ready'))));
+
+    const body = physReq.map(r => {
       const lots = D.rmLotsFEFO(state, r.rm);
       return e('div', { key: r.rm, style: { border: '1px solid var(--border)', borderRadius: 8, padding: 12, marginBottom: 12 } },
         e('div', { className: 'row', style: { justifyContent: 'space-between', marginBottom: 8 } },
@@ -229,7 +240,10 @@
     return e(Modal, { title: t('wh.issue.selectlot'), onClose, width: 600,
       footer: e(React.Fragment, null, e('button', { className: 'btn', onClick: onClose }, t('btn.cancel')),
         e('button', { className: 'btn btn-pri', disabled: !valid, onClick: submit }, e(Icon, { name: 'check', size: 14 }), t('btn.issue'))) },
-      e('div', { style: { fontSize: 11.5, color: 'var(--text-muted)', marginBottom: 12 } }, lang === 'th' ? 'ระบบเลือกล็อตที่ใกล้หมดอายุก่อนให้อัตโนมัติ (FEFO) — ปรับได้ตามต้องการ' : 'Lots near expiry are auto-selected first (FEFO) — adjust as needed'),
+      selfReq.length > 0 && e('div', { style: { marginBottom: 12 } },
+        blocked && e('div', { style: { fontSize: 11.5, color: 'var(--danger)', fontWeight: 600, marginBottom: 8 } }, lang === 'th' ? '⚠ มีวัตถุดิบผลิตเองที่ยังไม่พร้อม — เปิดสถานะเป็น "พร้อม" ที่ รายการสินค้า ก่อนจึงจะเบิกได้' : '⚠ A self-produced material is not ready — set it Ready in Item master first'),
+        selfBody),
+      physReq.length > 0 && e('div', { style: { fontSize: 11.5, color: 'var(--text-muted)', marginBottom: 12 } }, lang === 'th' ? 'ระบบเลือกล็อตที่ใกล้หมดอายุก่อนให้อัตโนมัติ (FEFO) — ปรับได้ตามต้องการ' : 'Lots near expiry are auto-selected first (FEFO) — adjust as needed'),
       body);
   }
 

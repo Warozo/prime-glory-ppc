@@ -209,6 +209,9 @@
   function rmReserved(s, code) { return (s.reservedByRm && s.reservedByRm[code]) || 0; }
   function rmAvailable(s, code) { return +(rmOnHand(s, code) - rmReserved(s, code)).toFixed(2); }
   function rmUnit(s, code) { const r = s.raw.find(x => x.code === code); return r ? r.unit : ''; }
+  // Self-produced (in-house) materials aren't stocked/lot-tracked — they only have a
+  // ready / not-ready status. Ready = can be issued in any quantity; not-ready = cannot.
+  function rmSelfMade(s, code) { const r = s.raw.find(x => x.code === code); return (r && r.selfMade) ? { selfMade: true, ready: r.ready !== false } : { selfMade: false, ready: false }; }
 
   // Convert a BOM line qty into the material's stock unit (BOM often in g/ml, stock in kg/L)
   function toStockQty(lineUnit, stockUnit, qty) {
@@ -230,6 +233,11 @@
       const raw = s.raw.find(x => x.code === l.rm);
       const stockUnit = raw ? raw.unit : l.unit;
       const need = +(toStockQty(l.unit, stockUnit, l.qty) * qty).toFixed(3);
+      // self-produced material: no stock/lots — ready means unlimited (never short), not-ready blocks it
+      if (raw && raw.selfMade) {
+        const ready = raw.ready !== false;
+        return { rm: l.rm, unit: stockUnit, need, selfMade: true, ready: ready, onHand: ready ? need : 0, reserved: 0, available: ready ? need : 0, short: ready ? 0 : need };
+      }
       const onHand = rmOnHand(s, l.rm);
       const reserved = rmReserved(s, l.rm);
       const available = ignoreReserved ? onHand : +(onHand - reserved).toFixed(3);
@@ -419,5 +427,5 @@
     return { changed: true, state: next, archived: rows.length };
   }
 
-  window.PG_DATA = { buildState, loadState, saveState, subscribe, snapshotState, onSaveStatus, archiveOverflow, emailFor, signIn, signOut, adminUser, genId, fgName, rmName, rmOnHand, rmLotsFEFO, rmReserved, rmAvailable, rmUnit, fgOnHand, bomRequirement, workflowForLine, buildWipLot, orderProgress, STEP_LIB, PROC_STATUS };
+  window.PG_DATA = { buildState, loadState, saveState, subscribe, snapshotState, onSaveStatus, archiveOverflow, emailFor, signIn, signOut, adminUser, genId, fgName, rmName, rmOnHand, rmLotsFEFO, rmReserved, rmAvailable, rmUnit, rmSelfMade, fgOnHand, bomRequirement, workflowForLine, buildWipLot, orderProgress, STEP_LIB, PROC_STATUS };
 })();

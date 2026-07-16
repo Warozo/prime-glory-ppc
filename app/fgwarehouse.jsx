@@ -162,10 +162,12 @@
   }
 
   /* ---------------- Warehouse Stock ---------------- */
-  function Stock({ state }) {
+  function Stock({ state, setState }) {
     const { t, lang } = useI18n();
     const [wh, setWh] = React.useState('rm');
     const [open, setOpen] = React.useState({}); // expanded RM code → show its in-stock lots
+    // self-produced materials: flip the ready/not-ready status right from the stock page
+    const toggleReady = (code) => setState && setState(prev => ({ ...prev, raw: prev.raw.map(x => x.code === code ? { ...x, ready: x.ready === false } : x) }));
     const rmAgg = state.raw.map(r => ({ ...r, onHand: D.rmOnHand(state, r.code), reserved: D.rmReserved(state, r.code), available: D.rmAvailable(state, r.code), lots: state.lots.filter(l => l.rm === r.code && l.remaining > 0).length }));
     const [q, setQ] = React.useState('');
     const [catF, setCatF] = React.useState('');
@@ -236,16 +238,21 @@
           React.createElement('tbody', null, rmFiltered.map(r => {
             const isOpen = !!open[r.code];
             const lots = state.lots.filter(l => l.rm === r.code && l.remaining > 0).sort((a, b) => new Date(a.expiry) - new Date(b.expiry));
-            const mainRow = React.createElement('tr', { key: r.code, className: 'clickrow', style: { cursor: 'pointer' }, onClick: () => setOpen(o => ({ ...o, [r.code]: !o[r.code] })) },
+            const selfMade = !!r.selfMade, ready = r.ready !== false;
+            const dash = React.createElement('td', { className: 'num mono faint' }, '—');
+            const mainRow = React.createElement('tr', { key: r.code, className: selfMade ? '' : 'clickrow', style: { cursor: selfMade ? 'default' : 'pointer' }, onClick: selfMade ? null : () => setOpen(o => ({ ...o, [r.code]: !o[r.code] })) },
               React.createElement('td', { className: 'mono', style: { fontWeight: 600 } },
-                React.createElement('span', { style: { display: 'inline-block', width: 12, color: 'var(--text-faint)', transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform .15s' } }, '▸'), ' ', r.code),
-              React.createElement('td', { style: { fontWeight: 600 } }, lang === 'th' ? r.nameTh : r.name),
+                !selfMade && React.createElement('span', { style: { display: 'inline-block', width: 12, color: 'var(--text-faint)', transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform .15s' } }, '▸'), selfMade ? '' : ' ', r.code),
+              React.createElement('td', { style: { fontWeight: 600 } }, lang === 'th' ? r.nameTh : r.name,
+                selfMade && React.createElement('span', { className: 'badge badge-soft', style: { fontSize: 9, marginLeft: 6 } }, lang === 'th' ? 'ผลิตเอง' : 'Self-made')),
               React.createElement('td', null, React.createElement('span', { className: 'badge badge-soft' }, r.cat)),
-              React.createElement('td', { className: 'num mono', style: { fontWeight: 600 } }, fmt(r.onHand) + ' ' + r.unit),
-              React.createElement('td', { className: 'num mono', style: { color: r.reserved > 0 ? 'var(--warn)' : 'var(--text-faint)' } }, r.reserved > 0 ? fmt(r.reserved) : '–'),
-              React.createElement('td', { className: 'num mono', style: { fontWeight: 600, color: r.available <= 0 ? 'var(--danger)' : 'var(--ok)' } }, fmt(r.available)),
-              React.createElement('td', { className: 'num mono' }, React.createElement('span', { className: 'badge badge-soft' }, r.lots)),
-              React.createElement('td', null, React.createElement('span', { className: 'badge', style: { color: (r.status || 'A') === 'A' ? 'var(--ok)' : 'var(--text-muted)', background: (r.status || 'A') === 'A' ? 'var(--ok-tint)' : 'var(--surface-3)' } }, (r.status || 'A') === 'A' ? '✓ ' + t('f.active') : t('f.inactive'))));
+              selfMade ? dash : React.createElement('td', { className: 'num mono', style: { fontWeight: 600 } }, fmt(r.onHand) + ' ' + r.unit),
+              selfMade ? dash : React.createElement('td', { className: 'num mono', style: { color: r.reserved > 0 ? 'var(--warn)' : 'var(--text-faint)' } }, r.reserved > 0 ? fmt(r.reserved) : '–'),
+              selfMade ? React.createElement('td', { className: 'num mono faint', style: { fontSize: 10.5 } }, lang === 'th' ? 'ไม่อั้น' : 'unlimited') : React.createElement('td', { className: 'num mono', style: { fontWeight: 600, color: r.available <= 0 ? 'var(--danger)' : 'var(--ok)' } }, fmt(r.available)),
+              selfMade ? dash : React.createElement('td', { className: 'num mono' }, React.createElement('span', { className: 'badge badge-soft' }, r.lots)),
+              React.createElement('td', null, selfMade
+                ? React.createElement('button', { className: 'btn btn-sm', onClick: (ev) => { ev.stopPropagation(); toggleReady(r.code); }, style: { fontSize: 10, padding: '2px 9px', fontWeight: 700, color: ready ? 'var(--ok)' : 'var(--danger)', borderColor: ready ? 'var(--ok)' : 'var(--danger)' }, title: lang === 'th' ? 'กดสลับ พร้อม/ไม่พร้อม' : 'toggle ready' }, ready ? (lang === 'th' ? '● พร้อม' : '● Ready') : (lang === 'th' ? '○ ไม่พร้อม' : '○ Not ready'))
+                : React.createElement('span', { className: 'badge', style: { color: (r.status || 'A') === 'A' ? 'var(--ok)' : 'var(--text-muted)', background: (r.status || 'A') === 'A' ? 'var(--ok-tint)' : 'var(--surface-3)' } }, (r.status || 'A') === 'A' ? '✓ ' + t('f.active') : t('f.inactive'))));
             const detailRow = isOpen ? React.createElement('tr', { key: r.code + '_d' },
               React.createElement('td', { colSpan: 8, style: { background: 'var(--surface-2)', padding: 0 } },
                 lots.length === 0
