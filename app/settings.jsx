@@ -20,6 +20,16 @@
     const usedIds = state.lines.map(l => l.id);
     const freeIds = LINE_IDS.filter(id => !usedIds.includes(id));
 
+    // draft copy for reorder + show/hide — committed only when "Save" is pressed
+    const [draft, setDraft] = React.useState(() => state.lines.map(l => ({ ...l })));
+    React.useEffect(() => { setDraft(state.lines.map(l => ({ ...l }))); }, [state.lines]);
+    const dragIdx = React.useRef(null);
+    const dirty = JSON.stringify(draft.map(l => [l.id, !!l.hidden])) !== JSON.stringify(state.lines.map(l => [l.id, !!l.hidden]));
+    function reorderDraft(from, to) { if (from == null || to == null || from === to) return; setDraft(d => { const a = d.slice(); const m = a.splice(from, 1)[0]; a.splice(to, 0, m); return a; }); }
+    function toggleHidden(id) { setDraft(d => d.map(l => l.id === id ? { ...l, hidden: !l.hidden } : l)); }
+    function saveOrder() { const snap = draft.map(l => ({ ...l })); setState(prev => ({ ...prev, lines: snap })); toast(t('toast.saved')); }
+    function cancelOrder() { setDraft(state.lines.map(l => ({ ...l }))); }
+
     // ---- Admin data cleanup (cascade-aware clears) ----
     // Transactional flow (orders → production → issues → reservations)
     const PROD_PATCH = { orders: [], prodOrders: [], scheduleBars: [], lotsWip: [], fgPending: [], issues: [], procurement: {}, reservedByRm: {} };
@@ -69,24 +79,34 @@
           e('div', { className: 'card-h' },
             e(Icon, { name: 'factory', size: 15, style: { color: 'var(--primary)' } }),
             e('div', null, e('h3', null, t('set.lines')), e('div', { className: 'sub' }, state.lines.length + ' ' + (lang === 'th' ? 'สาย' : 'lines') + ' · ' + t('set.totalcap') + ' ' + fmt(totalCap) + t('u.day'))),
-            e('div', { className: 'card-h-actions' },
-              e('button', { className: 'btn btn-sm btn-pri', disabled: freeIds.length === 0,
+            e('div', { className: 'card-h-actions row', style: { gap: 6 } },
+              dirty && e('button', { className: 'btn btn-sm', onClick: cancelOrder }, t('btn.cancel')),
+              dirty && e('button', { className: 'btn btn-sm btn-pri', onClick: saveOrder }, e(Icon, { name: 'check', size: 13 }), lang === 'th' ? 'บันทึกการจัดเรียง' : 'Save order'),
+              e('button', { className: 'btn btn-sm' + (dirty ? '' : ' btn-pri'), disabled: freeIds.length === 0,
                 onClick: () => setEdit({ id: freeIds[0], name: 'Line ' + freeIds[0], manpower: 6, dailyCap: 8000, wf: '' }) },
                 e(Icon, { name: 'plus', size: 13 }), t('set.addline')))),
           e('table', { className: 'tbl' },
             e('thead', null, e('tr', null,
               e('th', null, t('f.line')), e('th', { className: 'num' }, t('f.manpower')), e('th', { className: 'num' }, t('set.dailyplan')),
-              e('th', null, t('dsg.templates')), e('th', { style: { width: 80 } }, ''))),
-            e('tbody', null, state.lines.slice().sort((a, b) => a.id.localeCompare(b.id)).map(l => {
+              e('th', null, t('dsg.templates')), e('th', { style: { width: 170 } }, lang === 'th' ? 'แสดง / จัดการ' : 'Show / manage'))),
+            e('tbody', null, draft.map((l, i) => {
               const wf = state.workflows.find(w => w.id === l.wf) || state.workflows.find(w => w.line === l.id);
-              return e('tr', { key: l.id },
+              return e('tr', { key: l.id, draggable: true,
+                onDragStart: () => { dragIdx.current = i; },
+                onDragOver: (ev) => ev.preventDefault(),
+                onDrop: () => { reorderDraft(dragIdx.current, i); dragIdx.current = null; },
+                style: { opacity: l.hidden ? 0.5 : 1, cursor: 'grab' } },
                 e('td', null, e('div', { className: 'row', style: { gap: 8 } },
-                  e('span', { style: { width: 10, height: 10, borderRadius: 3, background: LINE_COLORS[l.id] || '#888' } }),
+                  e(Icon, { name: 'drag', size: 14, style: { color: 'var(--text-faint)', cursor: 'grab', flexShrink: 0 }, title: lang === 'th' ? 'ลากเพื่อจัดลำดับ' : 'Drag to reorder' }),
+                  e('span', { style: { width: 10, height: 10, borderRadius: 3, background: LINE_COLORS[l.id] || '#888', flexShrink: 0 } }),
                   e('div', null, e('div', { style: { fontWeight: 600 } }, l.name), e('div', { className: 'mono faint', style: { fontSize: 10 } }, 'Line ' + l.id)))),
                 e('td', { className: 'num mono' }, '👷 ' + l.manpower),
                 e('td', { className: 'num mono', style: { fontWeight: 700, color: 'var(--primary)' } }, fmt(l.dailyCap)),
                 e('td', null, wf ? e('span', { className: 'badge badge-soft', style: { fontSize: 10 } }, wf.name) : e('span', { className: 'faint', style: { fontSize: 11 } }, '—')),
                 e('td', null, e('div', { className: 'row', style: { gap: 4, justifyContent: 'flex-end' } },
+                  e('button', { className: 'btn btn-sm', onClick: () => toggleHidden(l.id), title: lang === 'th' ? 'เปิด/ปิดการแสดงในตารางการผลิต' : 'Show/hide on the schedule',
+                    style: { fontSize: 10, padding: '2px 8px', fontWeight: 600, color: l.hidden ? 'var(--text-muted)' : 'var(--ok)', borderColor: l.hidden ? 'var(--border)' : 'var(--ok)' } },
+                    l.hidden ? (lang === 'th' ? '○ ซ่อน' : '○ Hidden') : (lang === 'th' ? '● แสดง' : '● Shown')),
                   e('button', { className: 'btn btn-sm btn-ghost btn-icon', onClick: () => setEdit({ ...l, wf: l.wf || (wf ? wf.id : '') }) }, e(Icon, { name: 'edit', size: 13 })),
                   canDelete && e('button', { className: 'btn btn-sm btn-ghost btn-icon', onClick: () => removeLine(l.id) }, e(Icon, { name: 'trash', size: 13, style: { color: 'var(--danger)' } })))));
             }))),

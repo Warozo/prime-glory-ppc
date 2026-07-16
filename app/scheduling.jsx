@@ -50,9 +50,10 @@
     const poolReady = state.prodOrders.filter(p => (p.status === 'issued' || p.status === 'scheduled' || p.status === 'inprogress') && remainingOf(p) > 0);
     const poolWaiting = state.prodOrders.filter(p => p.status === 'reserved');
 
-    // Single sorted line order used for BOTH rendering and drag row-index math,
-    // so a dragged bar lands on the line actually under the cursor (A, B, C ...).
-    const sortedLines = state.lines.slice().sort((a, b) => a.id.localeCompare(b.id));
+    // Single line order used for BOTH rendering and drag row-index math, so a dragged bar lands
+    // on the line under the cursor. Respects the custom order set in Settings and hides lines
+    // toggled off there (state.lines array order; l.hidden excludes them from the schedule).
+    const sortedLines = state.lines.filter(l => !l.hidden);
 
     function persist() {
       setState(prev => ({ ...prev, scheduleBars: barsRef.current,
