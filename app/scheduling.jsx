@@ -234,18 +234,32 @@
           React.createElement('div', { ref: gridRef, style: { overflowX: 'auto' } },
             React.createElement('div', { style: { minWidth: LABEL_W + dayCount * DAY_W } },
               // header
-              React.createElement('div', { style: { display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--surface-2)', position: 'sticky', top: 0, zIndex: 2 } },
-                React.createElement('div', { style: { width: LABEL_W, flexShrink: 0, padding: '8px 12px', fontSize: 10.5, fontWeight: 700, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '.5px' } }, t('f.line')),
-                Array.from({ length: dayCount }).map((_, i) => {
-                  const dt = dayDate(i); const wd = dt.getDay();
-                  // month label shows at the start of the range and whenever the month changes
-                  const showMonth = i === 0 || dt.getMonth() !== dayDate(i - 1).getMonth();
-                  const monthLabel = dt.toLocaleDateString(lang === 'th' ? 'th-TH' : 'en-US', { month: 'short' });
-                  return React.createElement('div', { key: i, style: { width: DAY_W, flexShrink: 0, textAlign: 'center', padding: '5px 0 6px', borderLeft: '1px solid var(--border)', background: i === todayIdx ? 'var(--primary-tint)' : (wd === 0 || wd === 6) ? 'var(--surface-3)' : 'transparent' } },
-                    React.createElement('div', { style: { fontSize: 8.5, fontWeight: 700, color: 'var(--primary)', height: 12, lineHeight: '12px', whiteSpace: 'nowrap', overflow: 'visible' } }, showMonth ? monthLabel : ''),
-                    React.createElement('div', { style: { fontSize: 9, color: 'var(--text-faint)' } }, dt.toLocaleDateString(lang === 'th' ? 'th-TH' : 'en-US', { weekday: 'short' })),
-                    React.createElement('div', { style: { fontSize: 12, fontWeight: 700, color: i === todayIdx ? 'var(--primary)' : 'var(--text)' } }, dt.getDate()));
-                })),
+              React.createElement('div', { style: { position: 'sticky', top: 0, zIndex: 2, background: 'var(--surface-2)' } },
+                // month band — each month spans its days; label sticks to the left edge while scrolling
+                React.createElement('div', { style: { display: 'flex', borderBottom: '1px solid var(--border)' } },
+                  React.createElement('div', { style: { width: LABEL_W, flexShrink: 0 } }, ''),
+                  (function () {
+                    const groups = [];
+                    for (let gi = 0; gi < dayCount; gi++) {
+                      const gd = dayDate(gi); const key = gd.getFullYear() + '-' + gd.getMonth();
+                      const last = groups[groups.length - 1];
+                      if (last && last.key === key) last.count++;
+                      else groups.push({ key: key, count: 1, mo: gd.getMonth(), label: gd.toLocaleDateString(lang === 'th' ? 'th-TH' : 'en-US', { month: 'long' }) + ' ' + gd.getFullYear() });
+                    }
+                    return groups.map(g => React.createElement('div', { key: g.key, style: { width: g.count * DAY_W, flexShrink: 0, borderLeft: '2px solid var(--border-strong)', background: g.mo % 2 ? 'color-mix(in srgb, var(--primary) 8%, var(--surface-2))' : 'var(--surface-2)', overflow: 'hidden' } },
+                      React.createElement('div', { style: { position: 'sticky', left: LABEL_W, display: 'inline-block', fontSize: 10.5, fontWeight: 700, color: 'var(--primary)', padding: '4px 9px', whiteSpace: 'nowrap' } }, g.label)));
+                  })()),
+                // day row
+                React.createElement('div', { style: { display: 'flex', borderBottom: '1px solid var(--border)' } },
+                  React.createElement('div', { style: { width: LABEL_W, flexShrink: 0, padding: '6px 12px', fontSize: 10.5, fontWeight: 700, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '.5px' } }, t('f.line')),
+                  Array.from({ length: dayCount }).map((_, i) => {
+                    const dt = dayDate(i); const wd = dt.getDay();
+                    const monthStart = i > 0 && dt.getMonth() !== dayDate(i - 1).getMonth();
+                    const bg = i === todayIdx ? 'var(--primary-tint)' : (wd === 0 || wd === 6) ? 'var(--surface-3)' : (dt.getMonth() % 2 ? 'color-mix(in srgb, var(--primary) 8%, transparent)' : 'transparent');
+                    return React.createElement('div', { key: i, style: { width: DAY_W, flexShrink: 0, textAlign: 'center', padding: '6px 0', borderLeft: monthStart ? '2px solid var(--border-strong)' : '1px solid var(--border)', background: bg } },
+                      React.createElement('div', { style: { fontSize: 9, color: 'var(--text-faint)' } }, dt.toLocaleDateString(lang === 'th' ? 'th-TH' : 'en-US', { weekday: 'short' })),
+                      React.createElement('div', { style: { fontSize: 12, fontWeight: 700, color: i === todayIdx ? 'var(--primary)' : 'var(--text)' } }, dt.getDate()));
+                  }))),
               // rows (same sorted order as the drag math so A, B, C stay in order)
               sortedLines.map(ln => {
                 const lineBars = bars.filter(b => b.line === ln.id);
