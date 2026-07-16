@@ -14,7 +14,7 @@
     // Derive view-model from shared state so changes persist across navigation
     const lots = state.lotsWip.map(l => ({
       id: l.id, po: l.po, order: l.order, fg: l.fg, qty: l.qty, line: l.line, wf: l.wf,
-      steps: l.stations.map(st => ({ key: st.step, name: st.name, nameTh: st.nameTh, type: st.type, note: st.note || '' })),
+      steps: l.stations.map(st => ({ key: st.step, name: st.name, nameTh: st.nameTh, type: st.type, notes: st.notes || {} })),
       prog: l.stations.map(st => st.cumOut),
       defects: l.stations.map(st => st.cumDefect || 0),
       rework: l.stations.map(st => st.reworkDone || 0),
@@ -29,9 +29,9 @@
     // filter the lot list by production line + status (producing / done)
     const visibleLots = lots.filter(l => (!lineF || l.line === lineF) && (statusF === 'done' ? isComplete(l) : !isComplete(l)));
     const lot = visibleLots.find(l => l.id === selId) || visibleLots[0] || null;
-    // per-station free-text note (saved on the WIP lot's station)
-    function saveNote(stepIdx, text) {
-      setState(prev => ({ ...prev, lotsWip: prev.lotsWip.map(l => l.id === lot.id ? { ...l, stations: l.stations.map((st, k) => k === stepIdx ? { ...st, note: text } : st) } : l) }));
+    // per-station free-text note, stamped per day (station.notes[date])
+    function saveNote(stepIdx, date, text) {
+      setState(prev => ({ ...prev, lotsWip: prev.lotsWip.map(l => l.id === lot.id ? { ...l, stations: l.stations.map((st, k) => k === stepIdx ? { ...st, notes: { ...(st.notes || {}), [date]: text } } : st) } : l) }));
       toast(lang === 'th' ? 'บันทึกหมายเหตุแล้ว' : 'Note saved');
     }
 
@@ -412,7 +412,7 @@
             // note row at the very bottom — one editable note per process column
             React.createElement('tr', { style: { borderTop: '2px solid var(--border-strong)' } },
               React.createElement('td', { style: { position: 'sticky', left: 0, zIndex: 1, background: 'var(--surface-2)', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' } }, lang === 'th' ? 'หมายเหตุ' : 'Note'),
-              lot.steps.map((st, si) => React.createElement(NoteCell, { key: si, note: st.note, onSave: (txt) => onSaveNote(si, txt) }))))) ),
+              lot.steps.map((st, si) => React.createElement(NoteCell, { key: si + '_' + day, note: (st.notes || {})[day] || '', onSave: (txt) => onSaveNote(si, day, txt) }))))) ),
       dayTotal === 0 && React.createElement('div', { className: 'faint', style: { fontSize: 11.5, textAlign: 'center', padding: '12px 0' } }, lang === 'th' ? 'ยังไม่มีการบันทึกผลผลิตในวันที่เลือก' : 'No output reported on the selected day'));
   }
 
