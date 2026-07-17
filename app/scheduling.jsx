@@ -21,7 +21,9 @@
     // Bars are persisted in shared state (state.scheduleBars) so they survive navigation.
     // Each bar is ONE allocation of a PO onto a line: { id (alloc id), po (parent PO), qty (sub-qty), line, startDay, days }.
     // Legacy bars used id === po.id with no `.po`; normalise them so po always exists.
-    const [bars, setBarsRaw] = React.useState(() => (state.scheduleBars || []).map(b => ({ ...b, po: b.po || b.id })));
+    // po === null marks a pre-planned bar (no production order yet); only legacy bars that never
+    // stored a po at all fall back to the bar id.
+    const [bars, setBarsRaw] = React.useState(() => (state.scheduleBars || []).map(b => ({ ...b, po: b.po === undefined ? b.id : b.po })));
     const barsRef = React.useRef(bars);
     const setBars = (updater) => setBarsRaw(prev => { const next = typeof updater === 'function' ? updater(prev) : updater; barsRef.current = next; return next; });
     const [activeBar, setActiveBar] = React.useState(null);
@@ -41,14 +43,22 @@
     const dayCount = Math.max(1, Math.min(60, Math.round((_d1 - _d0) / 864e5) + 1));
     const winEnd = startOffset + dayCount; // exclusive end day-index (relative to today)
 
-    // How much of a PO is already placed on the board, and how much is left to allocate
-    const allocatedOf = (poId) => bars.filter(b => b.po === poId).reduce((a, b) => a + b.qty, 0);
-    const remainingOf = (po) => +(po.qty - allocatedOf(po.id)).toFixed(0);
+    // Bars are keyed to the customer order, so a pre-planned bar (placed before a production order
+    // exists) keeps counting once the order is reserved and its PO appears.
+    const allocatedOfOrder = (orderId) => bars.filter(b => b.order === orderId).reduce((a, b) => a + b.qty, 0);
+    const remainingOf = (po) => +(po.qty - allocatedOfOrder(po.order)).toFixed(0);
+    // Resolve a bar's production order (pre-planned bars carry no po until the order is reserved)
+    const poOfBar = (bar) => state.prodOrders.find(p => (bar.po && p.id === bar.po) || p.order === bar.order);
+    // A bar can only be started once its materials are issued
+    const READY_ST = ['issued', 'scheduled', 'inprogress', 'completed'];
+    const barReady = (bar) => { const p = poOfBar(bar); return !!p && READY_ST.indexOf(p.status) >= 0; };
+    const orderOfBar = (bar) => (state.orders || []).find(o => o.id === bar.order);
 
-    // Two pools: ready (materials issued, still has qty to place) — draggable; waiting (reserved) — not draggable.
-    // A split order keeps showing in the ready pool (with its remaining qty) until fully allocated.
+    // Three pools: ready (materials issued) — draggable & startable; reserved (awaiting issue);
+    // and plan (request / waiting) — draggable for pre-planning only, never startable.
     const poolReady = state.prodOrders.filter(p => (p.status === 'issued' || p.status === 'scheduled' || p.status === 'inprogress') && remainingOf(p) > 0);
     const poolWaiting = state.prodOrders.filter(p => p.status === 'reserved');
+    const poolPlan = (state.orders || []).filter(o => (o.status === 'request' || o.status === 'waiting') && (o.qty - allocatedOfOrder(o.id)) > 0);
 
     // Single line order used for BOTH rendering and drag row-index math, so a dragged bar lands
     // on the line under the cursor. Respects the custom order set in Settings and hides lines
@@ -118,48 +128,64 @@
     function onDrop(e, lineId) {
       e.preventDefault(); setDropLine(null);
       if (readOnly) return; // view-only: cannot place orders
-      const poId = e.dataTransfer.getData('text/plain'); if (!poId) return;
-      const po = state.prodOrders.find(p => p.id === poId); if (!po) return;
-      if (!(po.status === 'issued' || po.status === 'scheduled' || po.status === 'inprogress')) return;
-      const rem = remainingOf(po); if (rem <= 0) return;
+      // Payload is 'po:<id>' for an issued production order, 'order:<id>' for a pre-planned order
+      const raw = e.dataTransfer.getData('text/plain'); if (!raw) return;
+      let src = null;
+      if (raw.indexOf('order:') === 0) {
+        const o = poolPlan.find(x => x.id === raw.slice(6)); if (!o) return;
+        const rem = +(o.qty - allocatedOfOrder(o.id)).toFixed(0); if (rem <= 0) return;
+        src = { kind: 'order', id: o.id, order: o.id, fg: o.fg, priority: o.priority, label: o.id, max: rem };
+      } else {
+        const po = state.prodOrders.find(p => p.id === (raw.indexOf('po:') === 0 ? raw.slice(3) : raw)); if (!po) return;
+        if (!(po.status === 'issued' || po.status === 'scheduled' || po.status === 'inprogress')) return;
+        const rem = remainingOf(po); if (rem <= 0) return;
+        const o = state.orders.find(x => x.id === po.order) || {};
+        src = { kind: 'po', id: po.id, order: po.order, fg: po.fg, priority: o.priority, label: po.id, max: rem };
+      }
       const rect = gridRef.current.getBoundingClientRect();
       // account for horizontal scroll of the gantt grid so the day lands under the cursor
       const x = e.clientX - rect.left - LABEL_W + (gridRef.current.scrollLeft || 0);
       const startDay = Math.max(0, Math.min(winEnd - 1, Math.floor(x / DAY_W) + startOffset));
       // ask how much of the (remaining) qty goes on this line — the rest can be dropped elsewhere
-      setAllocReq({ po, lineId, startDay, max: rem });
+      setAllocReq({ src, lineId, startDay, max: src.max });
     }
 
-    // Commit one allocation (sub-qty) of a PO onto a line as a new Gantt bar.
-    function placeAllocation(po, lineId, startDay, qty) {
-      const q = Math.max(1, Math.min(Math.round(qty), remainingOf(po)));
-      const n = barsRef.current.filter(b => b.po === po.id).length + 1;
-      const allocId = po.id + '-' + n;
+    // Commit one allocation (sub-qty) onto a line as a new Gantt bar. `src` is either an issued
+    // production order or — for pre-planning — a customer order that has no PO yet.
+    function placeAllocation(src, lineId, startDay, qty) {
+      const q = Math.max(1, Math.min(Math.round(qty), src.max));
+      const n = barsRef.current.filter(b => b.order === src.order).length + 1;
+      const allocId = src.id + '-' + n;
       const cap = (state.lines.find(l => l.id === lineId) || {}).dailyCap || q;
       const days = Math.max(1, Math.min(4, Math.round(q / cap) || 1));
-      const order = state.orders.find(o => o.id === po.order) || {};
-      const bar = { id: allocId, po: po.id, order: po.order, fg: po.fg, qty: q, line: lineId, startDay, days, priority: order.priority || 'med' };
+      // po stays null while pre-planning; poOfBar() picks the PO up once the order is reserved
+      const bar = { id: allocId, po: src.kind === 'po' ? src.id : null, order: src.order, fg: src.fg, qty: q, line: lineId, startDay, days, priority: src.priority || 'med' };
       const nextBars = [...barsRef.current, bar];
       setBars(nextBars);
       // Only PLACE the allocation (order → 'scheduled'). No WIP lot yet — that happens on Start.
+      // Pre-planning never advances status: the order keeps waiting for its materials.
       setState(prev => ({ ...prev,
         scheduleBars: nextBars,
-        prodOrders: prev.prodOrders.map(p => p.id === po.id && p.status === 'issued' ? { ...p, status: 'scheduled' } : p),
-        orders: prev.orders.map(o => o.id === po.order && o.status !== 'completed' ? { ...o, status: 'scheduled' } : o),
+        prodOrders: src.kind === 'po' ? prev.prodOrders.map(p => p.id === src.id && p.status === 'issued' ? { ...p, status: 'scheduled' } : p) : prev.prodOrders,
+        orders: src.kind === 'po' ? prev.orders.map(o => o.id === src.order && o.status !== 'completed' ? { ...o, status: 'scheduled' } : o) : prev.orders,
       }));
       setAllocReq(null);
-      toast(t('toast.scheduled'));
+      toast(src.kind === 'po' ? t('toast.scheduled') : (lang === 'th' ? 'วางแผนล่วงหน้าแล้ว (ยังเริ่มผลิตไม่ได้)' : 'Pre-planned (not startable yet)'));
     }
 
     // Start production for ONE allocation: snapshot the line's workflow into a WIP lot, lock the line.
     function startProduction(bar) {
+      const po = poOfBar(bar);
+      if (!po) { toast(lang === 'th' ? 'ยังเบิกวัตถุดิบไม่เสร็จ' : 'Materials not issued yet'); return; }
       setState(prev => {
         if (prev.lotsWip.some(w => (w.alloc || w.po) === bar.id)) return prev;
         const wf = D.workflowForLine(prev, bar.line);
         const stations = (wf ? wf.steps : []).map(st => ({ step: st.key, name: st.name, nameTh: st.nameTh, type: st.type, wipIn: 0, wipOut: 0, cumOut: 0, wip: 0, cumDefect: 0, reworkDone: 0 }));
-        const lot = { id: 'LOT-' + bar.id, alloc: bar.id, po: bar.po, order: bar.order, fg: bar.fg, qty: bar.qty, line: bar.line, wf: (wf || {}).id, stations, outputLog: [] };
-        const prodOrders = prev.prodOrders.map(p => p.id === bar.po && p.status !== 'completed' ? { ...p, status: 'inprogress' } : p);
-        return { ...prev, prodOrders, lotsWip: [...prev.lotsWip, lot] };
+        const lot = { id: 'LOT-' + bar.id, alloc: bar.id, po: po.id, order: bar.order, fg: bar.fg, qty: bar.qty, line: bar.line, wf: (wf || {}).id, stations, outputLog: [] };
+        const prodOrders = prev.prodOrders.map(p => p.id === po.id && p.status !== 'completed' ? { ...p, status: 'inprogress' } : p);
+        // a bar placed before the PO existed carries no po — stamp it now that production is real
+        const scheduleBars = (prev.scheduleBars || []).map(b => b.id === bar.id ? { ...b, po: po.id } : b);
+        return { ...prev, prodOrders, lotsWip: [...prev.lotsWip, lot], scheduleBars };
       });
       toast(t('toast.started'));
     }
@@ -177,7 +203,10 @@
     const legend = React.createElement('div', { style: { padding: '8px 14px', borderTop: '1px solid var(--border)', display: 'flex', gap: 16, fontSize: 10.5, color: 'var(--text-muted)', flexWrap: 'wrap' } },
       React.createElement('span', { className: 'row', style: { gap: 5 } }, React.createElement(Icon, { name: 'drag', size: 12 }), lang === 'th' ? 'ลากเพื่อย้าย' : 'Drag to move'),
       React.createElement('span', { className: 'row', style: { gap: 5 } }, React.createElement(Icon, { name: 'arrowR', size: 12 }), lang === 'th' ? 'ลากขอบขวาเพื่อปรับระยะเวลา' : 'Drag right edge to resize'),
-      React.createElement('span', { className: 'row', style: { gap: 5 } }, React.createElement(Icon, { name: 'play', size: 12 }), t('sch.starthint')));
+      React.createElement('span', { className: 'row', style: { gap: 5 } }, React.createElement(Icon, { name: 'play', size: 12 }), t('sch.starthint')),
+      React.createElement('span', { className: 'row', style: { gap: 5 } },
+        React.createElement('span', { style: { width: 16, height: 9, borderRadius: 3, border: '1.5px dashed var(--danger)', background: 'color-mix(in srgb, var(--danger) 10%, white)' } }),
+        lang === 'th' ? 'แท่งสีแดง = วางแผนล่วงหน้า ยังเริ่มผลิตไม่ได้' : 'Red bar = pre-planned, not startable'));
 
     return React.createElement('div', null,
       React.createElement(PageHead, { title: t('sch.title'), sub: t('sch.sub'), actions: rangeControls }),
@@ -196,7 +225,7 @@
               poolReady.map(po => {
                 const order = state.orders.find(x => x.id === po.order) || {};
                 return React.createElement('div', { key: po.id, draggable: !readOnly,
-                  onDragStart: (e) => e.dataTransfer.setData('text/plain', po.id),
+                  onDragStart: (e) => e.dataTransfer.setData('text/plain', 'po:' + po.id),
                   style: { background: 'var(--surface)', border: '1px solid var(--ok)', borderLeft: '3px solid var(--ok)', borderRadius: 7, padding: 9, cursor: readOnly ? 'default' : 'grab', boxShadow: 'var(--shadow-sm)' } },
                   React.createElement('div', { className: 'row', style: { justifyContent: 'space-between', marginBottom: 3 } },
                     React.createElement('span', { className: 'mono', style: { fontSize: 11, fontWeight: 700, color: 'var(--primary)' } }, po.id),
@@ -228,7 +257,32 @@
                   React.createElement('div', { className: 'row', style: { justifyContent: 'space-between', marginTop: 5, fontSize: 10.5 } },
                     React.createElement('span', { className: 'mono faint' }, fmt(po.qty) + ' ' + t('u.pcs')),
                     React.createElement('button', { className: 'btn btn-sm btn-ghost', style: { padding: '2px 7px', fontSize: 10 }, onClick: () => go('issue') }, t('sch.gotoissue'))));
-              }))) ),
+              }))),
+          // Board 3 — pre-planning: orders still at request / waiting. Draggable onto the board so the
+          // plan can be seen ahead of time, but they place a red bar that cannot be started.
+          React.createElement('div', { className: 'card' },
+            React.createElement('div', { className: 'card-h' },
+              React.createElement(Icon, { name: 'request', size: 15, style: { color: 'var(--danger)' } }),
+              React.createElement('h3', { style: { fontSize: 12 } }, lang === 'th' ? 'วางแผนล่วงหน้า (ยังไม่พร้อมผลิต)' : 'Pre-plan (not ready)'),
+              React.createElement('span', { className: 'badge', style: { marginLeft: 'auto', color: 'var(--danger)', background: 'var(--danger-tint)' } }, poolPlan.length)),
+            React.createElement('div', { className: 'card-b', style: { display: 'flex', flexDirection: 'column', gap: 8, minHeight: 60 } },
+              poolPlan.length === 0 && React.createElement('div', { className: 'empty', style: { fontSize: 11 } }, '—'),
+              poolPlan.map(o => {
+                const rem = +(o.qty - allocatedOfOrder(o.id)).toFixed(0);
+                return React.createElement('div', { key: o.id, draggable: !readOnly,
+                  onDragStart: (e) => e.dataTransfer.setData('text/plain', 'order:' + o.id),
+                  style: { background: 'var(--surface)', border: '1px solid var(--danger)', borderLeft: '3px solid var(--danger)', borderRadius: 7, padding: 9, cursor: readOnly ? 'default' : 'grab', boxShadow: 'var(--shadow-sm)' } },
+                  React.createElement('div', { className: 'row', style: { justifyContent: 'space-between', marginBottom: 3 } },
+                    React.createElement('span', { className: 'mono', style: { fontSize: 11, fontWeight: 700, color: 'var(--danger)' } }, o.id),
+                    o.priority && React.createElement(PriorityBadge, { p: o.priority })),
+                  React.createElement('div', { style: { fontSize: 12, fontWeight: 600 } }, D.fgName(state, o.fg, lang)),
+                  React.createElement('div', { className: 'row', style: { justifyContent: 'space-between', marginTop: 5, fontSize: 10.5 } },
+                    React.createElement('span', { className: 'mono faint' }, (rem < o.qty ? fmt(rem) + '/' + fmt(o.qty) : fmt(o.qty)) + ' ' + t('u.pcs')),
+                    React.createElement('span', { className: 'badge badge-soft', style: { fontSize: 9.5 } }, t('status.' + o.status))),
+                  React.createElement('div', { style: { fontSize: 10.5, color: 'var(--text-muted)', marginTop: 4 } }, o.due ? fmtDate(o.due) : ''));
+              }),
+              poolPlan.length > 0 && React.createElement('div', { className: 'faint', style: { fontSize: 10, textAlign: 'center', marginTop: 2, lineHeight: 1.5 } },
+                lang === 'th' ? 'ลากวางเพื่อดูแผน — กดเริ่มผลิตได้เมื่อเบิกวัตถุดิบครบแล้ว' : 'Drag to plan — startable once materials are issued'))) ),
 
         // Gantt grid
         React.createElement('div', { className: 'card', style: { overflow: 'hidden' } },
@@ -263,7 +317,8 @@
                   }))),
               // rows (same sorted order as the drag math so A, B, C stay in order)
               sortedLines.map(ln => {
-                const lineBars = bars.filter(b => b.line === ln.id);
+                // a bar whose customer order was deleted disappears with it
+                const lineBars = bars.filter(b => b.line === ln.id && (state.orders || []).some(o => o.id === b.order));
                 // "แผน" counts only allocations overlapping the visible date window, split produced vs not
                 const winBars = lineBars.filter(b => b.startDay < winEnd && (b.startDay + b.days) > startOffset);
                 const planned = winBars.reduce((a, b) => a + b.qty, 0);
@@ -291,18 +346,19 @@
                     }),
                     // bars
                     lineBars.map(b => React.createElement(Bar, { key: b.id, bar: b, state, lang, t, startOffset, readOnly, active: activeBar === b.id, started: barStarted(b), completed: barCompleted(b),
+                      ready: barReady(b), planStatus: (orderOfBar(b) || {}).status,
                       produced: (function () { const l = lotOfBar(b); return l ? (l.stations[l.stations.length - 1].cumOut || 0) : 0; })(),
                       onStart: startProduction, onPointerDown: onBarPointerDown }))));
               }))),
           legend)),
       allocReq && React.createElement(AllocModal, { req: allocReq, state, t, lang,
         onClose: () => setAllocReq(null),
-        onSubmit: (q) => placeAllocation(allocReq.po, allocReq.lineId, allocReq.startDay, q) }));
+        onSubmit: (q) => placeAllocation(allocReq.src, allocReq.lineId, allocReq.startDay, q) }));
   }
 
   // Modal: how much of a PO's remaining qty to place on the dropped line
   function AllocModal({ req, state, t, lang, onClose, onSubmit }) {
-    const po = req.po, max = req.max;
+    const po = req.src, max = req.max;
     const line = state.lines.find(l => l.id === req.lineId) || {};
     const [qty, setQty] = React.useState(String(max));
     const q = Math.max(0, Math.min(Math.round(+qty || 0), max));
@@ -311,7 +367,7 @@
         React.createElement('button', { className: 'btn', onClick: onClose }, t('btn.cancel')),
         React.createElement('button', { className: 'btn btn-pri', disabled: q <= 0, onClick: () => onSubmit(q) }, React.createElement(Icon, { name: 'check', size: 14 }), lang === 'th' ? 'วางลงสาย' : 'Place')) },
       React.createElement('div', { style: { background: 'var(--surface-2)', borderRadius: 8, padding: '10px 12px', marginBottom: 14, fontSize: 12 } },
-        React.createElement('div', { className: 'row', style: { justifyContent: 'space-between' } }, React.createElement('span', { className: 'faint' }, t('f.po')), React.createElement('b', { className: 'mono' }, po.id)),
+        React.createElement('div', { className: 'row', style: { justifyContent: 'space-between' } }, React.createElement('span', { className: 'faint' }, po.kind === 'order' ? (lang === 'th' ? 'ใบสั่ง (วางแผนล่วงหน้า)' : 'Order (pre-plan)') : t('f.po')), React.createElement('b', { className: 'mono' }, po.id)),
         React.createElement('div', { className: 'row', style: { justifyContent: 'space-between', marginTop: 4 } }, React.createElement('span', { className: 'faint' }, t('f.product')), React.createElement('b', null, D.fgName(state, po.fg, lang))),
         React.createElement('div', { className: 'row', style: { justifyContent: 'space-between', marginTop: 4 } }, React.createElement('span', { className: 'faint' }, lang === 'th' ? 'คงเหลือให้แบ่ง' : 'Remaining to place'), React.createElement('b', { className: 'mono', style: { color: 'var(--primary)' } }, fmt(max) + ' ' + t('u.pcs')))),
       React.createElement(Field, { label: lang === 'th' ? 'จำนวนสำหรับสายนี้' : 'Quantity for this line', required: true, hint: (lang === 'th' ? 'สูงสุด ' : 'Max ') + fmt(max) + (lang === 'th' ? ' — ที่เหลือลากไปไลน์อื่นได้' : ' — the rest can go to another line') },
@@ -321,17 +377,18 @@
         React.createElement('button', { className: 'btn btn-sm', onClick: () => setQty(String(max)) }, lang === 'th' ? 'ทั้งหมด' : 'All')));
   }
 
-  function Bar({ bar, state, lang, t, startOffset, readOnly, active, started, completed, produced, onStart, onPointerDown }) {
-    const col = completed ? 'var(--ok)' : (LINE_COLORS[bar.line] || '#2d5bd7');
+  function Bar({ bar, state, lang, t, startOffset, readOnly, active, started, completed, produced, ready, planStatus, onStart, onPointerDown }) {
+    // A bar whose materials are not issued yet is pre-planning only: soft red, dashed, no Start.
+    const col = completed ? 'var(--ok)' : ready ? (LINE_COLORS[bar.line] || '#2d5bd7') : 'var(--danger)';
     const pct = bar.qty > 0 ? Math.min(100, Math.round((produced || 0) / bar.qty * 100)) : 0;
     const valText = started ? (fmt(produced || 0) + '/' + fmt(bar.qty) + ' (' + pct + '%)') : fmt(bar.qty);
     const valColor = started ? (completed ? 'var(--ok)' : 'var(--primary)') : 'var(--text-muted)';
-    const barBg = 'color-mix(in srgb,' + col + ' 14%, white)';
+    const barBg = 'color-mix(in srgb,' + col + ' ' + (ready ? 14 : 10) + '%, white)';
     return React.createElement('div', {
       onPointerDown: (e) => onPointerDown(e, bar, 'move'),
       // width follows the duration exactly (can be a single day); the taller row gives room for text
       style: { position: 'absolute', left: (bar.startDay - (startOffset || 0)) * DAY_W + 3, top: 7, width: bar.days * DAY_W - 6, height: ROW_H - 14,
-        background: barBg, border: '1.5px solid ' + col, borderLeft: '3px solid ' + col,
+        background: barBg, border: '1.5px ' + (ready ? 'solid ' : 'dashed ') + col, borderLeft: '3px solid ' + col,
         borderRadius: 6, cursor: 'grab', boxShadow: active ? '0 4px 14px rgba(18,32,56,.18)' : 'var(--shadow-sm)',
         zIndex: active ? 5 : 1, userSelect: 'none', transition: active ? 'none' : 'box-shadow .15s' } },
       // sticky-left info — SO id + value + product name; stays pinned at the left while scrolling a wide bar
@@ -344,7 +401,11 @@
       // right end ("ปลาย") — value + start / status
       React.createElement('div', { style: { position: 'absolute', right: 12, top: 6, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 } },
         React.createElement('span', { className: 'mono', style: { fontSize: 9.5, fontWeight: started ? 700 : 400, color: valColor, whiteSpace: 'nowrap' } }, valText),
-        (started || readOnly)
+        !ready
+          // not startable yet — show why (ขอเปิดผลิต / รอวัตถุดิบ / รอจองวัตถุดิบ)
+          ? React.createElement('span', { style: { fontSize: 8.5, fontWeight: 700, color: 'var(--danger)', background: 'var(--danger-tint)', borderRadius: 4, padding: '2px 5px', display: 'flex', alignItems: 'center', gap: 2, whiteSpace: 'nowrap' } },
+              React.createElement(Icon, { name: 'clock', size: 8 }), planStatus ? t('status.' + planStatus) : (lang === 'th' ? 'ยังไม่พร้อม' : 'Not ready'))
+        : (started || readOnly)
           ? React.createElement('span', { style: { fontSize: 8.5, fontWeight: 700, color: completed ? 'var(--ok)' : 'var(--primary)', display: 'flex', alignItems: 'center', gap: 2 } }, started ? React.createElement(React.Fragment, null, React.createElement(Icon, { name: completed ? 'check' : 'play', size: 8 }), completed ? t('status.completed') : t('sch.producing')) : null)
           : React.createElement('button', { onPointerDown: (e) => e.stopPropagation(), onClick: (e) => { e.stopPropagation(); onStart(bar); },
               style: { fontSize: 8.5, fontWeight: 700, color: '#fff', background: col, border: 'none', borderRadius: 4, padding: '2px 6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 2 } },

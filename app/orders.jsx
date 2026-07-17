@@ -85,7 +85,9 @@
     function del(o) {
       // only deletable before reservation (request / waiting)
       if (o.status !== 'request' && o.status !== 'waiting') return;
-      setState(prev => ({ ...prev, orders: prev.orders.filter(x => x.id !== o.id) }));
+      // a pre-planned bar on the schedule goes away with the order it was planning
+      setState(prev => ({ ...prev, orders: prev.orders.filter(x => x.id !== o.id),
+        scheduleBars: (prev.scheduleBars || []).filter(b => b.order !== o.id) }));
       setSel(null);
       toast(t('toast.deleted'), 'warn');
     }

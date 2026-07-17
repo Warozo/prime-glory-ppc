@@ -396,7 +396,8 @@
       toast(t('toast.saved')); setShow(false);
     }
     function prev_exists(s, id) { return s.orders.some(o => o.id === id); }
-    function del(id) { setState(prev => ({ ...prev, orders: prev.orders.filter(o => o.id !== id) })); toast(t('toast.deleted'), 'warn'); }
+    // deleting the order also clears any bar planned for it on the schedule
+    function del(id) { setState(prev => ({ ...prev, orders: prev.orders.filter(o => o.id !== id), scheduleBars: (prev.scheduleBars || []).filter(b => b.order !== id) })); toast(t('toast.deleted'), 'warn'); }
 
     // apply search (order id / customer / product) + status multi-select
     const needle = q.trim().toLowerCase();
