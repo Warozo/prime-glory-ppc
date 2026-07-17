@@ -345,7 +345,7 @@
                       return React.createElement('div', { key: i, style: { width: DAY_W, flexShrink: 0, borderLeft: '1px solid var(--border)', background: i === todayIdx ? 'rgba(45,91,215,.04)' : (wd === 0 || wd === 6) ? 'var(--surface-2)' : 'transparent' } });
                     }),
                     // bars
-                    lineBars.map(b => React.createElement(Bar, { key: b.id, bar: b, state, lang, t, startOffset, readOnly, active: activeBar === b.id, started: barStarted(b), completed: barCompleted(b),
+                    lineBars.map(b => React.createElement(Bar, { key: b.id, bar: b, state, lang, t, startOffset, dayCount, readOnly, active: activeBar === b.id, started: barStarted(b), completed: barCompleted(b),
                       ready: barReady(b), planStatus: (orderOfBar(b) || {}).status,
                       produced: (function () { const l = lotOfBar(b); return l ? (l.stations[l.stations.length - 1].cumOut || 0) : 0; })(),
                       onStart: startProduction, onPointerDown: onBarPointerDown }))));
@@ -377,7 +377,20 @@
         React.createElement('button', { className: 'btn btn-sm', onClick: () => setQty(String(max)) }, lang === 'th' ? 'ทั้งหมด' : 'All')));
   }
 
-  function Bar({ bar, state, lang, t, startOffset, readOnly, active, started, completed, produced, ready, planStatus, onStart, onPointerDown }) {
+  function Bar({ bar, state, lang, t, startOffset, dayCount, readOnly, active, started, completed, produced, ready, planStatus, onStart, onPointerDown }) {
+    // Clip the bar to the visible window. The bar is absolutely positioned, so one longer than the
+    // window would stretch the grid's scroll area past the day header and leave a blank strip.
+    // Only the drawing is clipped — bar.days is untouched.
+    const off = startOffset || 0;
+    const winW = dayCount * DAY_W;
+    const rawL = (bar.startDay - off) * DAY_W;
+    const rawR = rawL + bar.days * DAY_W;
+    if (rawR <= 0 || rawL >= winW) return null; // falls entirely outside the window
+    const clipL = rawL < 0, clipR = rawR > winW;
+    const left = Math.max(0, rawL) + (clipL ? 0 : 3);
+    const width = Math.max(14, Math.min(winW, rawR) - Math.max(0, rawL) - (clipL ? 0 : 3) - (clipR ? 0 : 3));
+    const overL = clipL ? off - bar.startDay : 0;                          // days hidden to the left
+    const overR = clipR ? (bar.startDay + bar.days) - (off + dayCount) : 0; // days hidden to the right
     // A bar whose materials are not issued yet is pre-planning only: soft red, dashed, no Start.
     const col = completed ? 'var(--ok)' : ready ? (LINE_COLORS[bar.line] || '#2d5bd7') : 'var(--danger)';
     const pct = bar.qty > 0 ? Math.min(100, Math.round((produced || 0) / bar.qty * 100)) : 0;
@@ -387,19 +400,27 @@
     return React.createElement('div', {
       onPointerDown: (e) => onPointerDown(e, bar, 'move'),
       // width follows the duration exactly (can be a single day); the taller row gives room for text
-      style: { position: 'absolute', left: (bar.startDay - (startOffset || 0)) * DAY_W + 3, top: 7, width: bar.days * DAY_W - 6, height: ROW_H - 14,
-        background: barBg, border: '1.5px ' + (ready ? 'solid ' : 'dashed ') + col, borderLeft: '3px solid ' + col,
-        borderRadius: 6, cursor: 'grab', boxShadow: active ? '0 4px 14px rgba(18,32,56,.18)' : 'var(--shadow-sm)',
+      style: { position: 'absolute', left: left, top: 7, width: width, height: ROW_H - 14,
+        background: barBg, border: '1.5px ' + (ready ? 'solid ' : 'dashed ') + col,
+        // a clipped end is squared off and loses its edge, so it reads as "continues beyond"
+        borderLeft: clipL ? 'none' : '3px solid ' + col,
+        borderRight: clipR ? 'none' : ('1.5px ' + (ready ? 'solid ' : 'dashed ') + col),
+        borderTopLeftRadius: clipL ? 0 : 6, borderBottomLeftRadius: clipL ? 0 : 6,
+        borderTopRightRadius: clipR ? 0 : 6, borderBottomRightRadius: clipR ? 0 : 6,
+        cursor: 'grab', boxShadow: active ? '0 4px 14px rgba(18,32,56,.18)' : 'var(--shadow-sm)',
         zIndex: active ? 5 : 1, userSelect: 'none', transition: active ? 'none' : 'box-shadow .15s' } },
       // sticky-left info — SO id + value + product name; stays pinned at the left while scrolling a wide bar
-      React.createElement('div', { style: { position: 'sticky', left: LABEL_W + 8, display: 'inline-flex', flexDirection: 'column', gap: 1, padding: '5px 8px', maxWidth: Math.max(60, bar.days * DAY_W - 6), background: barBg, borderRadius: 5, pointerEvents: 'none' } },
+      React.createElement('div', { style: { position: 'sticky', left: LABEL_W + 8, display: 'inline-flex', flexDirection: 'column', gap: 1, padding: '5px 8px', maxWidth: Math.max(60, width), background: barBg, borderRadius: 5, pointerEvents: 'none' } },
         React.createElement('div', { className: 'row', style: { gap: 6 } },
+          overL > 0 && React.createElement('span', { className: 'mono', style: { fontSize: 8.5, fontWeight: 700, color: col, whiteSpace: 'nowrap' } }, '←+' + overL + (lang === 'th' ? 'ว.' : 'd')),
           React.createElement('span', { className: 'mono', style: { fontSize: 10, fontWeight: 700, color: col, display: 'flex', alignItems: 'center', gap: 3, whiteSpace: 'nowrap' } },
             started && React.createElement(Icon, { name: 'lock', size: 9 }), bar.id),
           React.createElement('span', { className: 'mono', style: { fontSize: 9, fontWeight: started ? 700 : 400, color: valColor, whiteSpace: 'nowrap' } }, valText)),
         React.createElement('span', { style: { fontSize: 10.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, D.fgName(state, bar.fg, lang))),
       // right end ("ปลาย") — value + start / status
-      React.createElement('div', { style: { position: 'absolute', right: 12, top: 6, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 } },
+      React.createElement('div', { style: { position: 'absolute', right: clipR ? 4 : 12, top: 6, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 } },
+        overR > 0 && React.createElement('span', { className: 'mono', style: { fontSize: 8.5, fontWeight: 700, color: col, background: barBg, borderRadius: 4, padding: '1px 4px', whiteSpace: 'nowrap' } },
+          '+' + overR + (lang === 'th' ? ' วัน →' : 'd →')),
         React.createElement('span', { className: 'mono', style: { fontSize: 9.5, fontWeight: started ? 700 : 400, color: valColor, whiteSpace: 'nowrap' } }, valText),
         !ready
           // not startable yet — show why (ขอเปิดผลิต / รอวัตถุดิบ / รอจองวัตถุดิบ)
@@ -410,8 +431,8 @@
           : React.createElement('button', { onPointerDown: (e) => e.stopPropagation(), onClick: (e) => { e.stopPropagation(); onStart(bar); },
               style: { fontSize: 8.5, fontWeight: 700, color: '#fff', background: col, border: 'none', borderRadius: 4, padding: '2px 6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 2 } },
               React.createElement(Icon, { name: 'play', size: 8 }), t('sch.start'))),
-      // resize handle
-      React.createElement('div', { onPointerDown: (e) => onPointerDown(e, bar, 'resize'),
+      // resize handle — hidden when the real end is off-window (widen the range to resize there)
+      !clipR && React.createElement('div', { onPointerDown: (e) => onPointerDown(e, bar, 'resize'),
         style: { position: 'absolute', right: 0, top: 0, bottom: 0, width: 9, cursor: 'ew-resize', display: 'grid', placeItems: 'center' } },
         React.createElement('div', { style: { width: 3, height: 16, borderRadius: 2, background: col, opacity: .5 } })));
   }
