@@ -17,13 +17,22 @@
     const drag = React.useRef(null);
 
     const iso = (dayIdx) => { const dd = new Date(state.today); dd.setDate(dd.getDate() + dayIdx); return dd.toISOString().slice(0, 10); };
+    // A bar's `start` is an absolute date — the day it was actually planned for. `startDay` is only
+    // its offset from today for drawing, recomputed on every load, never the stored truth: storing
+    // the offset made every bar walk forward one column each day and lose its real first day.
+    const dayOf = (isoStr) => Math.round((new Date(isoStr) - new Date(state.today)) / 864e5);
+    // `startDay` is kept alongside `start` so an older cached bundle still renders these bars.
+    const toStored = (list) => list.map(b => ({ ...b, start: iso(b.startDay) }));
 
     // Bars are persisted in shared state (state.scheduleBars) so they survive navigation.
     // Each bar is ONE allocation of a PO onto a line: { id (alloc id), po (parent PO), qty (sub-qty), line, startDay, days }.
     // Legacy bars used id === po.id with no `.po`; normalise them so po always exists.
     // po === null marks a pre-planned bar (no production order yet); only legacy bars that never
     // stored a po at all fall back to the bar id.
-    const [bars, setBarsRaw] = React.useState(() => (state.scheduleBars || []).map(b => ({ ...b, po: b.po === undefined ? b.id : b.po })));
+    const [bars, setBarsRaw] = React.useState(() => (state.scheduleBars || []).map(b => ({ ...b,
+      po: b.po === undefined ? b.id : b.po,
+      // legacy bars have no `start` — anchor them where they currently sit
+      startDay: b.start ? dayOf(b.start) : b.startDay })));
     const barsRef = React.useRef(bars);
     const setBars = (updater) => setBarsRaw(prev => { const next = typeof updater === 'function' ? updater(prev) : updater; barsRef.current = next; return next; });
     const [activeBar, setActiveBar] = React.useState(null);
@@ -66,7 +75,7 @@
     const sortedLines = state.lines.filter(l => !l.hidden);
 
     function persist() {
-      setState(prev => ({ ...prev, scheduleBars: barsRef.current,
+      setState(prev => ({ ...prev, scheduleBars: toStored(barsRef.current),
         // keep each started lot's line in sync with its allocation bar (line is locked post-start, so usually a no-op)
         lotsWip: prev.lotsWip.map(w => { const b = barsRef.current.find(x => x.id === (w.alloc || w.po)); return b && b.line !== w.line ? { ...w, line: b.line } : w; }) }));
     }
@@ -165,7 +174,7 @@
       // Only PLACE the allocation (order → 'scheduled'). No WIP lot yet — that happens on Start.
       // Pre-planning never advances status: the order keeps waiting for its materials.
       setState(prev => ({ ...prev,
-        scheduleBars: nextBars,
+        scheduleBars: toStored(nextBars),
         prodOrders: src.kind === 'po' ? prev.prodOrders.map(p => p.id === src.id && p.status === 'issued' ? { ...p, status: 'scheduled' } : p) : prev.prodOrders,
         orders: src.kind === 'po' ? prev.orders.map(o => o.id === src.order && o.status !== 'completed' ? { ...o, status: 'scheduled' } : o) : prev.orders,
       }));
