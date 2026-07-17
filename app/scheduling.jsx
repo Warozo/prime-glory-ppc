@@ -115,7 +115,10 @@
           const days = Math.max(1, Math.min(winEnd - b.startDay, d.oDays + dDays)); // stretch up to the displayed range end
           return { ...b, days };
         } else {
-          const startDay = Math.max(0, Math.min(winEnd - b.days, d.oStart + dDays));
+          // lower bound is the visible window start — NOT today (0): a bar anchored in the past
+          // must not be yanked forward by a mere tap. Its own current start is always allowed.
+          const minStart = Math.min(startOffset, d.oStart);
+          const startDay = Math.max(minStart, Math.min(Math.max(winEnd - b.days, d.oStart), d.oStart + dDays));
           // once production has started on this allocation, keep it on its line (no cross-line move)
           if (barStarted(b)) return { ...b, startDay };
           const dRow = Math.round((e.clientY - d.startY) / (d.rowH || ROW_H));
@@ -154,7 +157,8 @@
       const rect = gridRef.current.getBoundingClientRect();
       // account for horizontal scroll of the gantt grid so the day lands under the cursor
       const x = e.clientX - rect.left - LABEL_W + (gridRef.current.scrollLeft || 0);
-      const startDay = Math.max(0, Math.min(winEnd - 1, Math.floor(x / DAY_W) + startOffset));
+      // land on the column under the cursor even when the window starts in the past
+      const startDay = Math.max(startOffset, Math.min(winEnd - 1, Math.floor(x / DAY_W) + startOffset));
       // ask how much of the (remaining) qty goes on this line — the rest can be dropped elsewhere
       setAllocReq({ src, lineId, startDay, max: src.max });
     }
