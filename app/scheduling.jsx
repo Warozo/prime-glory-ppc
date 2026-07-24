@@ -49,7 +49,8 @@
     if (isNaN(_d1)) _d1 = new Date(state.today);
     if (_d1 < _d0) { const tmp = _d0; _d0 = _d1; _d1 = tmp; }
     const startOffset = Math.round((_d0 - new Date(state.today)) / 864e5); // window start, in days from today (can be <0)
-    const dayCount = Math.max(1, Math.min(60, Math.round((_d1 - _d0) / 864e5) + 1));
+    // cap at ~1 year of columns so a very wide custom range still renders the whole selection
+    const dayCount = Math.max(1, Math.min(370, Math.round((_d1 - _d0) / 864e5) + 1));
     const winEnd = startOffset + dayCount; // exclusive end day-index (relative to today)
 
     // Bars are keyed to the customer order, so a pre-planned bar (placed before a production order
