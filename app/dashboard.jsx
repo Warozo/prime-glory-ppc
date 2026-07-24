@@ -113,6 +113,7 @@
     const DateField = window.PG_UI.DateField;
     const def = React.useMemo(() => { const f = new Date(s.today); f.setDate(f.getDate() - 14); return { from: f.toISOString().slice(0, 10), to: s.today }; }, [s.today]);
     const [range, setRange] = React.useState(def);
+    const [expanded, setExpanded] = React.useState({}); // 'line_po' -> show per-station breakdown
     function quick(n) { const f = new Date(s.today); f.setDate(f.getDate() - (n - 1)); setRange({ from: f.toISOString().slice(0, 10), to: s.today }); }
 
     // date list (cap 60)
@@ -132,17 +133,27 @@
 
     // per line → per production order → per day, from final-step output.
     // (one order can appear under several lines, supporting split production.)
-    const grid = {};        // line -> po -> date -> qty
+    const grid = {};        // line -> po -> date -> qty (final-step output, the table's main figure)
     const lineByDate = {};  // line -> date -> qty (line subtotal)
     const totalByDate = {}; // date -> qty (grand total)
     const poInfo = {};      // po -> { fg, order }
+    const stationAgg = {};  // line -> po -> stepIdx -> { idx, name, byDate } (every step, for the drill-down)
     s.lotsWip.forEach(lot => {
       const last = lot.stations[lot.stations.length - 1];
       poInfo[lot.po] = { fg: lot.fg, order: lot.order };
       (lot.outputLog || []).forEach(e => {
+        const dd = e.date || s.today;
+        // per-station accumulation — keyed by step index so split lots on the same line/po merge,
+        // and a station with no output on a day simply stays absent for that date
+        const sk = (e.stepIdx != null ? e.stepIdx : e.step);
+        stationAgg[lot.line] = stationAgg[lot.line] || {};
+        stationAgg[lot.line][lot.po] = stationAgg[lot.line][lot.po] || {};
+        const cur = stationAgg[lot.line][lot.po][sk] || { idx: (e.stepIdx != null ? e.stepIdx : 999), name: e.station || e.step, byDate: {} };
+        cur.byDate[dd] = (cur.byDate[dd] || 0) + (e.qty || 0);
+        stationAgg[lot.line][lot.po][sk] = cur;
+        // final-step output feeds the main daily grid (unchanged)
         const isLast = e.step === last.step || e.station === last.name || e.station === last.nameTh;
         if (!isLast) return;
-        const dd = e.date || s.today;
         grid[lot.line] = grid[lot.line] || {};
         grid[lot.line][lot.po] = grid[lot.line][lot.po] || {};
         grid[lot.line][lot.po][dd] = (grid[lot.line][lot.po][dd] || 0) + e.qty;
@@ -151,6 +162,11 @@
         totalByDate[dd] = (totalByDate[dd] || 0) + e.qty;
       });
     });
+    // ordered station rows for a given line/po drill-down
+    const stationRowsFor = (ln, po) => {
+      const m = stationAgg[ln] && stationAgg[ln][po];
+      return m ? Object.keys(m).map(k => m[k]).sort((a, b) => a.idx - b.idx) : [];
+    };
     const showLines = s.lines.filter(l => grid[l.id]).map(l => l.id);
     const grandTotal = dates.reduce((a, iso) => a + (totalByDate[iso] || 0), 0);
     const hasOut = grandTotal > 0;
@@ -209,12 +225,29 @@
                   // one row per production order under this line
                   pos.forEach(po => {
                     const info = poInfo[po] || {};
-                    rows.push(React.createElement('tr', { key: ln + '_' + po, className: 'clickrow', onClick: () => go('shopfloor') },
+                    const ekey = ln + '_' + po;
+                    const isOpen = !!expanded[ekey];
+                    // production-order row — click the row to drill into its per-station daily output
+                    rows.push(React.createElement('tr', { key: ekey, className: 'clickrow', onClick: () => setExpanded(x => Object.assign({}, x, { [ekey]: !x[ekey] })), title: lang === 'th' ? 'คลิกเพื่อดูยอดรายสถานี' : 'Click for per-station output' },
                       React.createElement('td', { style: { position: 'sticky', left: 0, zIndex: 1, background: 'var(--surface)', paddingLeft: 26 } },
-                        React.createElement('span', { className: 'mono', style: { fontSize: 11, fontWeight: 600, color: 'var(--primary)' } }, po),
-                        React.createElement('span', { className: 'faint', style: { fontSize: 10.5, marginLeft: 6 } }, D.fgName(s, info.fg, lang))),
+                        React.createElement('span', { className: 'row', style: { gap: 5 } },
+                          React.createElement(Icon, { name: isOpen ? 'chevD' : 'chevR', size: 12, style: { color: 'var(--text-faint)', flexShrink: 0 } }),
+                          React.createElement('span', { className: 'mono', style: { fontSize: 11, fontWeight: 600, color: 'var(--primary)' } }, po),
+                          React.createElement('span', { className: 'faint', style: { fontSize: 10.5 } }, D.fgName(s, info.fg, lang)))),
                       dates.map(iso => { const v = (grid[ln][po] || {})[iso]; return React.createElement('td', { key: iso, className: 'num mono', style: { color: v ? 'var(--st-completed)' : 'var(--text-faint)', fontWeight: v ? 600 : 400 } }, v ? fmt(v) : '·'); }),
                       React.createElement('td', { className: 'num mono', style: { fontWeight: 600, background: 'var(--surface-2)' } }, fmt(rowSum(grid[ln][po])))));
+                    // drill-down: one row per workflow station, its output on each day
+                    if (isOpen) {
+                      const strows = stationRowsFor(ln, po);
+                      if (strows.length === 0) {
+                        rows.push(React.createElement('tr', { key: ekey + '_empty' },
+                          React.createElement('td', { colSpan: dates.length + 2, style: { position: 'sticky', left: 0, paddingLeft: 48, fontSize: 10.5, color: 'var(--text-faint)', fontStyle: 'italic' } }, lang === 'th' ? 'ยังไม่มีบันทึกผลผลิตรายสถานี' : 'No per-station output logged')));
+                      }
+                      strows.forEach(st => rows.push(React.createElement('tr', { key: ekey + '_st' + st.idx, style: { background: 'var(--surface)' } },
+                        React.createElement('td', { style: { position: 'sticky', left: 0, zIndex: 1, background: 'var(--surface)', paddingLeft: 48, fontSize: 10.5, color: 'var(--text-muted)', whiteSpace: 'nowrap' } }, '↳ ' + st.name),
+                        dates.map(iso => { const v = st.byDate[iso]; return React.createElement('td', { key: iso, className: 'num mono', style: { fontSize: 10.5, color: v ? 'var(--text)' : 'var(--text-faint)' } }, v ? fmt(v) : '·'); }),
+                        React.createElement('td', { className: 'num mono', style: { fontSize: 10.5, fontWeight: 600, background: 'var(--surface-2)' } }, fmt(rowSum(st.byDate))))));
+                    }
                   });
                   return rows;
                 }, []).concat([
