@@ -55,9 +55,19 @@
       toast(t('toast.received'));
       setRecv(null);
     }
-    function reject(id) {
-      setState(prev => ({ ...prev, fgPending: prev.fgPending.map(f => f.id === id ? { ...f, status: 'rejected' } : f) }));
-      toast(t('toast.saved'), 'warn');
+    function reject(f) {
+      // reject only closes the receiving order — already-received lots stay in stock. Reversible.
+      if (!window.confirm(lang === 'th'
+        ? 'ยืนยันปฏิเสธการรับเข้าใบ ' + f.id + ' ?\nส่วนที่เหลือ ' + fmt(readyToReceive(f)) + ' ชิ้น จะยังไม่ถูกรับเข้า (เปิดรับใหม่ได้ภายหลัง)'
+        : 'Reject receiving order ' + f.id + ' ?\nThe remaining ' + fmt(readyToReceive(f)) + ' pcs will not be received (can be reopened later)')) return;
+      setState(prev => ({ ...prev, fgPending: prev.fgPending.map(x => x.id === f.id ? { ...x, status: 'rejected' } : x) }));
+      toast(lang === 'th' ? 'ปฏิเสธการรับเข้าแล้ว' : 'Receiving rejected', 'warn');
+    }
+    // Undo a reject: recompute status from what has actually been received so the rest can be taken in again.
+    function reopen(f) {
+      const done = received(f) >= f.qty;
+      setState(prev => ({ ...prev, fgPending: prev.fgPending.map(x => x.id === f.id ? { ...x, status: done ? 'accepted' : 'pending' } : x) }));
+      toast(lang === 'th' ? 'เปิดรับเข้าอีกครั้งแล้ว' : 'Receiving reopened');
     }
 
     const STAGES = [
@@ -124,12 +134,19 @@
                   e('td', { className: 'num mono', style: { color: rec > 0 ? 'var(--ok)' : 'var(--text-faint)' } }, fmt(rec)),
                   e('td', { className: 'num mono', style: { fontWeight: 700, color: ready > 0 ? 'var(--warn)' : 'var(--text-faint)' } }, ready > 0 ? fmt(ready) : '–'),
                   e('td', null, e(Progress, { value: pct, color: pct >= 100 ? 'var(--ok)' : 'var(--primary)' }), e('div', { className: 'faint mono', style: { fontSize: 9.5, marginTop: 2 } }, pct + '%')),
-                  e('td', null, e(StatusBadge, { status: f.status === 'rejected' ? 'request' : f.status })),
+                  e('td', null, f.status === 'rejected'
+                    ? e('span', { className: 'badge', style: { color: 'var(--danger)', background: 'var(--danger-tint)' } }, lang === 'th' ? 'ปฏิเสธ' : 'Rejected')
+                    : e(StatusBadge, { status: f.status })),
                   e('td', null, f.status === 'pending'
                     ? e('div', { className: 'row', style: { gap: 6 } },
                         e('button', { className: 'btn btn-sm btn-pri', disabled: ready <= 0, onClick: () => setRecv(f) }, e(Icon, { name: 'receive', size: 12 }), t('btn.receive')),
-                        e('button', { className: 'btn btn-sm', onClick: () => reject(f.id) }, t('btn.reject')))
-                    : e('span', { className: 'faint', style: { fontSize: 11 } }, f.status === 'accepted' ? '✓ ' + t('status.accepted') : t('btn.reject')))),
+                        e('button', { className: 'btn btn-sm', style: { color: 'var(--danger)', borderColor: 'var(--danger)' }, onClick: () => reject(f) }, e(Icon, { name: 'x', size: 12 }), t('btn.reject')))
+                    : f.status === 'rejected'
+                      // rejected is reversible — reopen brings the remaining ready qty back into play
+                      ? e('div', { className: 'row', style: { gap: 6 } },
+                          e('span', { className: 'badge', style: { color: 'var(--danger)', background: 'var(--danger-tint)', fontSize: 10.5 } }, e(Icon, { name: 'x', size: 11 }), t('btn.reject')),
+                          e('button', { className: 'btn btn-sm', onClick: () => reopen(f) }, e(Icon, { name: 'receive', size: 12 }), lang === 'th' ? 'เปิดรับเข้าอีกครั้ง' : 'Reopen'))
+                      : e('span', { className: 'faint', style: { fontSize: 11 } }, '✓ ' + t('status.accepted')))),
                 // sub-rows: lots received so far
                 (f.receipts || []).length > 0 && e('tr', null, e('td', { colSpan: 10, style: { padding: '0 14px 8px 40px', background: 'var(--surface-2)' } },
                   e('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6, paddingTop: 6 } },
