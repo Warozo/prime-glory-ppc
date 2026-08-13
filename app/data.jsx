@@ -172,8 +172,12 @@
   function seedSeq(state) {
     if (!state) return;
     let mx = _seq;
-    const scan = (arr) => (arr || []).forEach(x => { if (!x || typeof x.id !== 'string') return; const m = /^[A-Za-z]+-(\d+)$/.exec(x.id); if (m && +m[1] > mx) mx = +m[1]; });
+    const scan = (arr, key) => (arr || []).forEach(x => { const v = x && x[key || 'id']; if (typeof v !== 'string') return; const m = /^[A-Za-z]+-(\d+)$/.exec(v); if (m && +m[1] > mx) mx = +m[1]; });
+    // Scan every collection that mints genId-style ids off the shared counter — including lots (id)
+    // and fgStock (sid). Omitting these let a reload reset the counter below existing lot/fg ids, so
+    // the next genId('L')/genId('FG') collided (duplicate lot ids / sids). Seeding past them prevents it.
     scan(state.fgPending); scan(state.issues); scan(state.prodOrders);
+    scan(state.lots); scan(state.fgStock, 'sid'); scan(state.receipts); scan(state.lotsWip);
     _seq = mx;
   }
   // Each FG-stock row needs a stable unique id (sid) so sales deduct the exact lot row,
