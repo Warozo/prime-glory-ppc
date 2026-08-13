@@ -124,7 +124,7 @@
   function ItemModal({ tab, t, lang, edit, onClose, onSubmit }) {
     const [f, setF] = React.useState(edit
       ? { code: edit.code, name: edit.name, nameTh: edit.nameTh, unit: edit.unit, cat: edit.cat, status: edit.status || 'A', packaging: (edit.cat || '').toLowerCase() === 'packaging', selfMade: !!edit.selfMade, ready: edit.ready !== false }
-      : { code: '', name: '', nameTh: '', unit: 'pcs', cat: '', status: 'A', packaging: false, selfMade: false, ready: true });
+      : { code: '', name: '', nameTh: '', unit: 'pcs', cat: tab === 'rm' ? 'Raw material' : '', status: 'A', packaging: false, selfMade: false, ready: true });
     const set = (k, v) => setF(p => ({ ...p, [k]: v }));
     return React.createElement(Modal, { title: (edit ? t('btn.edit') : t('btn.new')) + ' · ' + (tab === 'rm' ? t('rawmat') : t('finished')), onClose, width: 480,
       footer: React.createElement(React.Fragment, null, React.createElement('button', { className: 'btn', onClick: onClose }, t('btn.cancel')),
@@ -135,11 +135,17 @@
         React.createElement('div', { style: { gridColumn: 'span 2' } }, React.createElement(Field, { label: (tab === 'rm' ? (lang === 'th' ? 'ชื่อสาร / ชื่อวัตถุดิบ' : 'Substance / material name') : (lang === 'th' ? 'ชื่อสาร' : 'Substance name')), required: true }, React.createElement('input', { className: 'input', value: f.nameTh, onChange: e => set('nameTh', e.target.value) }))),
         tab === 'rm' && React.createElement('div', { style: { gridColumn: 'span 2' } },
           React.createElement('label', { style: { display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12.5, fontWeight: 600 } },
-            React.createElement('input', { type: 'checkbox', checked: !!f.packaging, onChange: e => setF(p => e.target.checked ? { ...p, packaging: true, name: '', cat: 'Packaging' } : { ...p, packaging: false, cat: p.cat === 'Packaging' ? '' : p.cat }) }),
+            React.createElement('input', { type: 'checkbox', checked: !!f.packaging, onChange: e => setF(p => e.target.checked ? { ...p, packaging: true, name: '', cat: 'Packaging' } : { ...p, packaging: false, cat: 'Raw material' }) }),
             React.createElement('span', null, lang === 'th' ? 'Packaging (บรรจุภัณฑ์ — ไม่มี INCI)' : 'Packaging (no INCI Name)'))),
         React.createElement('div', { style: { gridColumn: 'span 2' } }, React.createElement(Field, { label: 'INCI Name', hint: f.packaging ? (lang === 'th' ? 'ปิดสำหรับบรรจุภัณฑ์' : 'disabled for packaging') : null },
           React.createElement('input', { className: 'input', value: f.packaging ? '' : f.name, disabled: !!f.packaging, onChange: e => set('name', e.target.value), style: f.packaging ? { background: 'var(--surface-3)', color: 'var(--text-faint)', cursor: 'not-allowed' } : null }))),
-        React.createElement(Field, { label: t('f.category') }, React.createElement('input', { className: 'input', value: f.cat, onChange: e => set('cat', e.target.value), placeholder: tab === 'rm' ? 'Active / Base / Packaging' : 'Serum / Foundation / Lip' })),
+        tab === 'rm'
+          // RM has exactly two categories; the dropdown drives (and stays in sync with) the packaging flag
+          ? React.createElement(Field, { label: t('f.category'), required: true }, React.createElement('select', { className: 'select', value: f.cat === 'Packaging' ? 'Packaging' : 'Raw material',
+              onChange: e => { const v = e.target.value; setF(p => v === 'Packaging' ? { ...p, cat: 'Packaging', packaging: true, name: '' } : { ...p, cat: 'Raw material', packaging: false }); } },
+              React.createElement('option', { value: 'Raw material' }, 'Raw material'),
+              React.createElement('option', { value: 'Packaging' }, 'Packaging')))
+          : React.createElement(Field, { label: t('f.category') }, React.createElement('input', { className: 'input', value: f.cat, onChange: e => set('cat', e.target.value), placeholder: 'Serum / Foundation / Lip' })),
         tab === 'rm' && React.createElement('div', { style: { gridColumn: 'span 2', borderTop: '1px solid var(--border)', paddingTop: 10 } },
           React.createElement('label', { style: { display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12.5, fontWeight: 600 } },
             React.createElement('input', { type: 'checkbox', checked: !!f.selfMade, onChange: e => set('selfMade', e.target.checked) }),
