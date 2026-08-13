@@ -398,7 +398,9 @@
   // (new records are prepended, so the newest are at the head) and move the older overflow into
   // app_state_archive — so the JSON snapshot can't grow without bound. Archives FIRST, then trims;
   // if the archive write fails we keep everything in the blob (never lose data).
-  const ARCHIVE_CAP = 1000;
+  // 10,000 keeps ~1–2 years of issue/receipt/sales history visible in-app before anything archives
+  // (est. ~1.2–2.4k issues/yr); at ~200 B/record the blob stays ~1 MB even near the cap.
+  const ARCHIVE_CAP = 10000;
   async function archiveOverflow(state) {
     if (!_supa || !state) return { changed: false, state: state };
     const rows = [], trim = {};
