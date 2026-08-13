@@ -179,12 +179,22 @@
   }
 
   /* ---------------- Warehouse Stock ---------------- */
-  function Stock({ state, setState }) {
+  function Stock({ state, setState, readOnly }) {
     const { t, lang } = useI18n();
+    const toast = useToast();
     const [wh, setWh] = React.useState('rm');
     const [open, setOpen] = React.useState({}); // expanded RM code → show its in-stock lots
+    const [lotDraft, setLotDraft] = React.useState({}); // sid → in-progress "full lot" input value
     // self-produced materials: flip the ready/not-ready status right from the stock page
     const toggleReady = (code) => setState && setState(prev => ({ ...prev, raw: prev.raw.map(x => x.code === code ? { ...x, ready: x.ready === false } : x) }));
+    // record a lot's full target quantity so the page can show the outstanding amount still to receive
+    function saveFullLot(sid) {
+      const raw = lotDraft[sid];
+      const n = Math.max(0, Math.round(+raw || 0));
+      setState(prev => ({ ...prev, fgStock: (prev.fgStock || []).map(r => r.sid === sid ? Object.assign({}, r, { fullLot: n }) : r) }));
+      setLotDraft(d => { const c = Object.assign({}, d); delete c[sid]; return c; });
+      toast(t('toast.saved'));
+    }
     const rmAgg = state.raw.map(r => ({ ...r, onHand: D.rmOnHand(state, r.code), reserved: D.rmReserved(state, r.code), available: D.rmAvailable(state, r.code), lots: state.lots.filter(l => l.rm === r.code && l.remaining > 0).length }));
     const [q, setQ] = React.useState('');
     const [catF, setCatF] = React.useState('');
@@ -213,8 +223,8 @@
           rmFiltered.map(r => [r.code, r.nameTh || '', r.name || '', r.cat || '', r.unit || '', r.onHand, r.reserved, r.available, r.lots, lotsOf(r.code).map(l => l.lot).join('; '), st(r.status)]));
       } else {
         window.PG_UI.exportCsv('stock-finishedgoods-' + dt + '.csv',
-          ['รหัสสินค้า', 'ชื่อสาร', 'INCI Name', 'ล็อต', 'จำนวน', 'วันหมดอายุ'],
-          fgFiltered.map(x => { const p = state.fg.find(g => g.code === x.fg) || {}; return [x.fg, p.nameTh || '', p.name || '', x.lot || '', x.qty, x.expiry || '']; }));
+          ['รหัสสินค้า', 'ชื่อสาร', 'INCI Name', 'ล็อต', 'ยอดรับเข้า', 'จำนวนเต็มลอต', 'ยอดคงค้างรับลอตสินค้า', 'วันหมดอายุ'],
+          fgFiltered.map(x => { const p = state.fg.find(g => g.code === x.fg) || {}; const full = x.fullLot != null ? x.fullLot : ''; const out = x.fullLot != null ? (x.fullLot - x.qty) : ''; return [x.fg, p.nameTh || '', p.name || '', x.lot || '', x.qty, full, out, x.expiry || '']; }));
       }
     }
     // Detailed export: one row per in-stock lot of each (filtered) raw material.
@@ -295,12 +305,36 @@
       : React.createElement('div', { className: 'card' },
         React.createElement('div', { className: 'card-h' }, React.createElement(Icon, { name: 'fg', size: 15, style: { color: 'var(--primary)' } }), React.createElement('h3', null, lang === 'th' ? 'คลังสินค้าสำเร็จรูป' : 'Finished Good Warehouse')),
         React.createElement('table', { className: 'tbl' },
-          React.createElement('thead', null, React.createElement('tr', null, React.createElement('th', null, t('f.product')), React.createElement('th', null, t('f.lot')), React.createElement('th', { className: 'num' }, t('f.qty')), React.createElement('th', null, t('f.expiry')))),
-          React.createElement('tbody', null, fgFiltered.map((x, i) => React.createElement('tr', { key: i },
-            React.createElement('td', { style: { fontWeight: 600 } }, D.fgName(state, x.fg, lang)),
-            React.createElement('td', { className: 'mono' }, x.lot),
-            React.createElement('td', { className: 'num mono', style: { fontWeight: 600 } }, fmt(x.qty)),
-            React.createElement('td', { className: 'mono faint' }, fmtDate(x.expiry))))))));
+          React.createElement('thead', null, React.createElement('tr', null,
+            React.createElement('th', null, t('f.product')),
+            React.createElement('th', null, t('f.lot')),
+            React.createElement('th', { className: 'num' }, lang === 'th' ? 'ยอดรับเข้า' : 'Received'),
+            React.createElement('th', { className: 'num' }, lang === 'th' ? 'จำนวนเต็มลอต' : 'Full lot qty'),
+            React.createElement('th', { className: 'num' }, lang === 'th' ? 'ยอดคงค้างรับลอตสินค้า' : 'Outstanding to receive'),
+            React.createElement('th', null, t('f.expiry')))),
+          React.createElement('tbody', null, fgFiltered.map((x, i) => {
+            const draft = lotDraft[x.sid];
+            const inputVal = draft !== undefined ? draft : (x.fullLot != null ? x.fullLot : '');
+            const full = x.fullLot != null ? x.fullLot : null;
+            const outstanding = full != null ? full - x.qty : null; // full lot − received
+            const dirty = draft !== undefined && (+draft || 0) !== (x.fullLot || 0);
+            return React.createElement('tr', { key: x.sid || i },
+              React.createElement('td', { style: { fontWeight: 600 } }, D.fgName(state, x.fg, lang)),
+              React.createElement('td', { className: 'mono' }, x.lot),
+              React.createElement('td', { className: 'num mono', style: { fontWeight: 600 } }, fmt(x.qty)),
+              // full-lot input + save
+              React.createElement('td', { className: 'num' }, readOnly
+                ? React.createElement('span', { className: 'mono', style: { fontWeight: 600 } }, full != null ? fmt(full) : '–')
+                : React.createElement('div', { className: 'row', style: { gap: 6, justifyContent: 'flex-end' } },
+                    React.createElement('input', { className: 'input mono', type: 'number', min: 0, value: inputVal, placeholder: lang === 'th' ? 'จำนวน' : 'Qty', style: { width: 96, textAlign: 'right' },
+                      onChange: e => setLotDraft(d => Object.assign({}, d, { [x.sid]: e.target.value })),
+                      onKeyDown: e => { if (e.key === 'Enter') saveFullLot(x.sid); } }),
+                    React.createElement('button', { className: 'btn btn-sm' + (dirty ? ' btn-pri' : ''), disabled: draft === undefined, onClick: () => saveFullLot(x.sid), title: t('btn.save') }, React.createElement(Icon, { name: 'check', size: 13 })))),
+              // outstanding = full lot − received
+              React.createElement('td', { className: 'num mono', style: { fontWeight: 700, color: outstanding == null ? 'var(--text-faint)' : outstanding > 0 ? 'var(--warn)' : 'var(--ok)' } },
+                outstanding == null ? '–' : (outstanding > 0 ? fmt(outstanding) + ' ' + (lang === 'th' ? 'ชิ้น' : 'pcs') : '✓ ' + (lang === 'th' ? 'ครบ' : 'complete'))),
+              React.createElement('td', { className: 'mono faint' }, fmtDate(x.expiry)));
+          })))));
   }
 
   window.PG_FGReceiving = FGReceiving;
