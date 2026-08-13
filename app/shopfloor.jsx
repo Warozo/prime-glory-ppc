@@ -429,14 +429,32 @@
   }
 
   // ---- QA department board: hourly defects + cumulative defect / pending rework per line & order ----
-  function QABoard({ state, go }) {
+  function QABoard({ state, setState, go, readOnly }) {
     const { t, lang } = useI18n();
+    const toast = useToast();
     const s = state;
     const DateField = window.PG_UI.DateField, Stat = window.PG_UI.Stat;
     const [day, setDay] = React.useState(s.today);
     const [lineF, setLineF] = React.useState('');
     const [statusF, setStatusF] = React.useState('producing'); // default: in-progress orders (finished ones don't pile up)
+    const [view, setView] = React.useState('board'); // board | report
+    const [qaEdit, setQaEdit] = React.useState(null); // categorise-a-day's-defects modal payload
     const cols = HOUR_SLOTS;
+    // Per-(order · QA station · day) breakdown of defects into named QA-check-list categories.
+    const qaDefects = s.qaDefects || [];
+    const breakdownOf = (po, step, date) => { const r = qaDefects.find(x => x.po === po && x.step === step && x.date === date); return r ? r.items : []; };
+    // Upsert (or clear) the breakdown for one order/station/day
+    function saveQADefect(rec) {
+      const items = (rec.items || []).filter(it => it.type && +it.qty > 0);
+      setState(prev => {
+        const list = (prev.qaDefects || []).filter(x => !(x.po === rec.po && x.step === rec.step && x.date === rec.date));
+        if (items.length) list.push({ po: rec.po, line: rec.line, step: rec.step, station: rec.station, fg: rec.fg, date: rec.date, items: items });
+        return { ...prev, qaDefects: list };
+      });
+      toast(t('toast.saved')); setQaEdit(null);
+    }
+    // sum of a station's defects logged on the selected day (from the hourly grid built below)
+    const dayDefectOf = (ln, po, idx) => cols.reduce((a, c) => a + ((((hourly[ln] || {})[po] || {})[idx] || {})[c.k] || 0), 0);
     const LINE_COLORS = { A: '#2d5bd7', B: '#7b5cd9', C: '#1f8a5b', D: '#e08a1e', E: '#cf3b3b', F: '#0e7490', G: '#9333ea' };
     const lotDone = (lot) => { const last = lot.stations[lot.stations.length - 1]; return !!last && (last.cumOut || 0) >= lot.qty; };
     const includeLot = (lot) => (!lineF || lot.line === lineF) && (statusF === 'done' ? lotDone(lot) : !lotDone(lot));
@@ -478,7 +496,7 @@
     function exportQA() {
       const headers = [lang === 'th' ? 'สาย' : 'Line', lang === 'th' ? 'ใบสั่งผลิต' : 'Production order', lang === 'th' ? 'ขั้น QA' : 'QA step', lang === 'th' ? 'สินค้า' : 'Product']
         .concat(cols.map(c => c.k === 'lunch' ? (lang === 'th' ? 'พักเที่ยง' : 'Lunch') : c.label))
-        .concat([lang === 'th' ? 'Defect รวม' : 'Total defect', lang === 'th' ? 'รอ Rework' : 'Pending rework']);
+        .concat([(lang === 'th' ? 'Defect ' : 'Defect ') + fmtDate(day), lang === 'th' ? 'Defect รวม' : 'Total defect', lang === 'th' ? 'รอ Rework' : 'Pending rework']);
       const rows = [];
       lineIds.forEach(ln => {
         const ln0 = s.lines.find(l => l.id === ln);
@@ -486,7 +504,7 @@
         Object.keys(cum[ln]).forEach(po => Object.keys(cum[ln][po]).forEach(idx => {
           const info = cum[ln][po][idx];
           const hrow = cols.map(c => (((hourly[ln] || {})[po] || {})[idx] || {})[c.k] || 0);
-          rows.push([lineName, po, info.name, D.fgName(s, info.fg, lang)].concat(hrow).concat([info.defect, info.defect - info.rework]));
+          rows.push([lineName, po, info.name, D.fgName(s, info.fg, lang)].concat(hrow).concat([dayDefectOf(ln, po, +idx), info.defect, info.defect - info.rework]));
         }));
       });
       window.PG_UI.exportCsv('qa-defects-' + day + '.csv', headers, rows);
@@ -494,11 +512,16 @@
 
     return React.createElement('div', null,
       React.createElement(PageHead, { title: lang === 'th' ? 'กระดานคุณภาพ (QA)' : 'Quality Board (QA)', sub: lang === 'th' ? 'ติดตาม Defect รายชั่วโมง แยกตามสายผลิตและใบสั่งผลิต' : 'Hourly defects by production line and order' }),
+      React.createElement('div', { className: 'row', style: { marginBottom: 'var(--gap)' } },
+        React.createElement('div', { className: 'pill-tabs' },
+          React.createElement('button', { className: view === 'board' ? 'on' : '', onClick: () => setView('board') }, lang === 'th' ? 'กระดาน' : 'Board'),
+          React.createElement('button', { className: view === 'report' ? 'on' : '', onClick: () => setView('report') }, lang === 'th' ? 'รายงาน Defect' : 'Defect report'))),
       React.createElement('div', { className: 'grid g-3', style: { marginBottom: 'var(--gap)' } },
         React.createElement(Stat, { label: lang === 'th' ? 'Defect สะสมทั้งหมด' : 'Total defects', value: fmt(totDefect), accent: 'var(--danger)', icon: 'alert' }),
         React.createElement(Stat, { label: lang === 'th' ? 'Rework แล้ว' : 'Reworked', value: fmt(totRework), accent: 'var(--ok)', icon: 'check' }),
         React.createElement(Stat, { label: lang === 'th' ? 'ยอดรอ Rework' : 'Pending rework', value: fmt(totDefect - totRework), accent: 'var(--warn)', icon: 'clock' })),
-      React.createElement('div', { className: 'card' },
+      view === 'report' && React.createElement(QAReport, { state: s, day: day, setDay: setDay, lineF: lineF, setLineF: setLineF, t: t, lang: lang }),
+      view === 'board' && React.createElement('div', { className: 'card' },
         React.createElement('div', { className: 'card-h' },
           React.createElement(Icon, { name: 'qc', size: 15, style: { color: 'var(--danger)' } }),
           React.createElement('h3', null, lang === 'th' ? 'Defect รายชั่วโมง' : 'Hourly defects'),
@@ -522,38 +545,164 @@
                 React.createElement('thead', null, React.createElement('tr', null,
                   React.createElement('th', { style: { position: 'sticky', left: 0, zIndex: 2, background: 'var(--surface-2)', minWidth: 230 } }, lang === 'th' ? 'สาย / ใบสั่งผลิต · ขั้น QA' : 'Line / Order · QA step'),
                   cols.map(c => React.createElement('th', { key: c.k, className: 'num', style: { whiteSpace: 'nowrap', textAlign: c.k === 'lunch' ? 'center' : 'right', background: c.k === 'lunch' ? 'var(--surface-3)' : 'var(--surface-2)' } }, c.k === 'lunch' ? (lang === 'th' ? 'พักเที่ยง' : 'Lunch') : c.label)),
+                  React.createElement('th', { className: 'num', style: { background: 'var(--primary-tint)', whiteSpace: 'nowrap', color: 'var(--primary)' } }, (lang === 'th' ? 'Defect ' : 'Defect ') + fmtDate(day)),
                   React.createElement('th', { className: 'num', style: { background: 'var(--surface-2)', whiteSpace: 'nowrap' } }, lang === 'th' ? 'Defect รวม' : 'Defect'),
                   React.createElement('th', { className: 'num', style: { background: 'var(--surface-2)', whiteSpace: 'nowrap' } }, lang === 'th' ? 'รอ Rework' : 'Pending'))),
                 React.createElement('tbody', null,
                   lineIds.reduce((rows, ln) => {
                     const ln0 = s.lines.find(l => l.id === ln);
-                    let lineDefect = 0, linePending = 0;
-                    Object.keys(cum[ln]).forEach(po => Object.keys(cum[ln][po]).forEach(idx => { const x = cum[ln][po][idx]; lineDefect += x.defect; linePending += (x.defect - x.rework); }));
+                    let lineDefect = 0, linePending = 0, lineDay = 0;
+                    Object.keys(cum[ln]).forEach(po => Object.keys(cum[ln][po]).forEach(idx => { const x = cum[ln][po][idx]; lineDefect += x.defect; linePending += (x.defect - x.rework); lineDay += dayDefectOf(ln, po, +idx); }));
                     rows.push(React.createElement('tr', { key: 'L_' + ln, style: { background: 'var(--surface-2)' } },
                       React.createElement('td', { style: { position: 'sticky', left: 0, zIndex: 1, background: 'var(--surface-2)', fontWeight: 700, fontSize: 11.5 } },
                         React.createElement('span', { className: 'row', style: { gap: 6 } },
                           React.createElement('span', { style: { width: 9, height: 9, borderRadius: 2, background: LINE_COLORS[ln] || '#888' } }),
                           (ln0 ? ln0.name : 'Line ' + ln))),
                       cols.map(c => React.createElement('td', { key: c.k, style: { background: c.k === 'lunch' ? 'var(--surface-3)' : 'transparent' } }, '')),
+                      React.createElement('td', { className: 'num mono', style: { fontWeight: 700, color: lineDay > 0 ? 'var(--primary)' : 'var(--text-faint)', background: 'var(--primary-tint)' } }, lineDay > 0 ? fmt(lineDay) : '·'),
                       React.createElement('td', { className: 'num mono', style: { fontWeight: 700, color: 'var(--danger)' } }, fmt(lineDefect)),
                       React.createElement('td', { className: 'num mono', style: { fontWeight: 700, color: linePending > 0 ? 'var(--warn)' : 'var(--text-faint)' } }, fmt(linePending))));
                     // one row per (order × QA station) so multiple QA steps show separately
                     Object.keys(cum[ln]).forEach(po => {
                       Object.keys(cum[ln][po]).forEach(idx => {
                         const info = cum[ln][po][idx];
-                        rows.push(React.createElement('tr', { key: ln + '_' + po + '_' + idx, className: 'clickrow', onClick: () => go('shopfloor') },
-                          React.createElement('td', { style: { position: 'sticky', left: 0, zIndex: 1, background: 'var(--surface)', paddingLeft: 26 } },
+                        const dayD = dayDefectOf(ln, po, +idx);
+                        const bd = breakdownOf(po, +idx, day);
+                        const bdSum = bd.reduce((a, it) => a + (+it.qty || 0), 0);
+                        rows.push(React.createElement('tr', { key: ln + '_' + po + '_' + idx, className: 'clickrow' },
+                          React.createElement('td', { style: { position: 'sticky', left: 0, zIndex: 1, background: 'var(--surface)', paddingLeft: 26, cursor: 'pointer' }, onClick: () => go('shopfloor') },
                             React.createElement('div', { className: 'row', style: { gap: 6 } },
                               React.createElement('span', { className: 'mono', style: { fontSize: 10.5, fontWeight: 600, color: 'var(--primary)' } }, po),
                               React.createElement('span', { style: { fontSize: 11, fontWeight: 600 } }, info.name)),
                             React.createElement('div', { className: 'faint', style: { fontSize: 9.5, marginTop: 1 } }, D.fgName(s, info.fg, lang))),
                           cols.map(c => { const v = (((hourly[ln] || {})[po] || {})[idx] || {})[c.k]; return React.createElement('td', { key: c.k, className: 'num mono', style: { background: c.k === 'lunch' ? 'var(--surface-3)' : 'transparent', color: v ? 'var(--danger)' : 'var(--text-faint)', fontWeight: v ? 700 : 400 } }, v ? fmt(v) : '·'); }),
+                          // day-defect cell — click to categorise the day's defects by QA check list
+                          React.createElement('td', { className: 'num mono', title: dayD > 0 ? (lang === 'th' ? 'คลิกเพื่อระบุประเภท Defect' : 'Click to categorise defects') : null,
+                            onClick: (dayD > 0 && !readOnly) ? (() => setQaEdit({ po: po, line: ln, step: +idx, station: info.name, fg: info.fg, date: day, total: dayD, items: bd.length ? bd.map(x => ({ type: x.type, qty: x.qty })) : [{ type: '', qty: '' }] })) : null,
+                            style: { background: 'var(--primary-tint)', cursor: (dayD > 0 && !readOnly) ? 'pointer' : 'default', fontWeight: 700, color: dayD > 0 ? 'var(--primary)' : 'var(--text-faint)' } },
+                            dayD > 0 ? fmt(dayD) : '·',
+                            dayD > 0 && React.createElement('span', { style: { display: 'block', fontSize: 8.5, fontWeight: 600, color: bdSum >= dayD ? 'var(--ok)' : 'var(--warn)' } },
+                              bdSum > 0 ? (bdSum >= dayD ? (lang === 'th' ? 'ระบุครบ' : 'tagged') : (lang === 'th' ? 'ระบุ ' + fmt(bdSum) + '/' + fmt(dayD) : fmt(bdSum) + '/' + fmt(dayD))) : (lang === 'th' ? 'ยังไม่ระบุ' : 'untagged'))),
                           React.createElement('td', { className: 'num mono', style: { fontWeight: 600, color: 'var(--danger)' } }, fmt(info.defect)),
                           React.createElement('td', { className: 'num mono', style: { fontWeight: 600, color: (info.defect - info.rework) > 0 ? 'var(--warn)' : 'var(--text-faint)' } }, fmt(info.defect - info.rework))));
                       });
                     });
                     return rows;
-                  }, []))))));
+                  }, []))))),
+      qaEdit && React.createElement(QADefectModal, { qaEdit: qaEdit, state: s, t: t, lang: lang, onClose: () => setQaEdit(null), onSubmit: saveQADefect }));
+  }
+
+  // Modal: split one station's day-total defects into named QA-check-list categories
+  function QADefectModal({ qaEdit, state, t, lang, onClose, onSubmit }) {
+    const [items, setItems] = React.useState(qaEdit.items && qaEdit.items.length ? qaEdit.items.slice() : [{ type: '', qty: '' }]);
+    const types = state.defects || [];
+    const total = qaEdit.total;
+    const sum = items.reduce((a, it) => a + (+it.qty || 0), 0);
+    const over = sum > total;
+    const setRow = (i, k, v) => setItems(p => p.map((it, j) => j === i ? Object.assign({}, it, { [k]: v }) : it));
+    const addRow = () => setItems(p => p.concat([{ type: '', qty: '' }]));
+    const delRow = (i) => setItems(p => p.filter((_, j) => j !== i));
+    // which defect names are still free to pick (each category once)
+    const chosen = items.map(it => it.type);
+    return React.createElement(Modal, { title: (lang === 'th' ? 'ระบุประเภท Defect · ' : 'Categorise defects · ') + qaEdit.po, onClose: onClose, width: 520,
+      footer: React.createElement(React.Fragment, null,
+        React.createElement('button', { className: 'btn', onClick: onClose }, t('btn.cancel')),
+        React.createElement('button', { className: 'btn btn-pri', disabled: over, onClick: () => onSubmit({ po: qaEdit.po, line: qaEdit.line, step: qaEdit.step, station: qaEdit.station, fg: qaEdit.fg, date: qaEdit.date, items: items }) }, React.createElement(Icon, { name: 'check', size: 14 }), t('btn.save'))) },
+      React.createElement('div', { style: { background: 'var(--surface-2)', borderRadius: 8, padding: '10px 12px', marginBottom: 12, fontSize: 12 } },
+        React.createElement('div', { className: 'row', style: { justifyContent: 'space-between' } }, React.createElement('span', { className: 'faint' }, qaEdit.station), React.createElement('b', { className: 'mono' }, fmtDate(qaEdit.date))),
+        React.createElement('div', { className: 'row', style: { justifyContent: 'space-between', marginTop: 4 } }, React.createElement('span', { className: 'faint' }, lang === 'th' ? 'Defect รวมของวันนี้' : "Day's total defect"), React.createElement('b', { className: 'mono', style: { color: 'var(--danger)' } }, fmt(total) + ' ' + t('u.pcs')))),
+      types.length === 0
+        ? React.createElement('div', { className: 'empty', style: { fontSize: 12, padding: 16 } }, lang === 'th' ? 'ยังไม่มีรายการใน QA Check List — เพิ่มได้ที่หน้าทะเบียนคู่ค้า/พนักงาน/QA' : 'No QA check-list entries yet — add them in the registry')
+        : React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
+            items.map((it, i) => React.createElement('div', { key: i, className: 'row', style: { gap: 8 } },
+              React.createElement('select', { className: 'select', style: { flex: 1 }, value: it.type, onChange: e => setRow(i, 'type', e.target.value) },
+                [React.createElement('option', { key: '_', value: '' }, lang === 'th' ? '— เลือกประเภท Defect —' : '— select defect —')].concat(
+                  types.filter(ty => ty === it.type || chosen.indexOf(ty) < 0).map(ty => React.createElement('option', { key: ty, value: ty }, ty)))),
+              React.createElement('input', { className: 'input mono', type: 'number', min: 0, value: it.qty, placeholder: lang === 'th' ? 'จำนวน' : 'Qty', style: { width: 110 }, onChange: e => setRow(i, 'qty', e.target.value) }),
+              React.createElement('button', { className: 'btn btn-sm btn-ghost btn-icon', onClick: () => delRow(i) }, React.createElement(Icon, { name: 'x', size: 13 })))),
+            React.createElement('button', { className: 'btn btn-sm', style: { alignSelf: 'flex-start' }, onClick: addRow, disabled: chosen.filter(Boolean).length >= types.length }, React.createElement(Icon, { name: 'plus', size: 13 }), lang === 'th' ? 'เพิ่มประเภท' : 'Add type'),
+            React.createElement('div', { className: 'row', style: { justifyContent: 'space-between', borderTop: '1px solid var(--border)', paddingTop: 8, fontSize: 12 } },
+              React.createElement('span', { className: 'faint' }, lang === 'th' ? 'รวมที่ระบุ' : 'Tagged total'),
+              React.createElement('b', { className: 'mono', style: { color: over ? 'var(--danger)' : sum === total ? 'var(--ok)' : 'var(--warn)' } }, fmt(sum) + ' / ' + fmt(total) + (over ? (lang === 'th' ? ' — เกินยอด!' : ' — over!') : sum < total ? (lang === 'th' ? ' — เหลือ ' + fmt(total - sum) : ' — ' + fmt(total - sum) + ' left') : '')))));
+  }
+
+  // Defect-breakdown report — daily or per-order aggregate over the QA check list, exportable
+  function QAReport({ state, day, setDay, lineF, setLineF, t, lang }) {
+    const s = state;
+    const DateField = window.PG_UI.DateField;
+    const [scope, setScope] = React.useState('day'); // day (selected date) | all (every date, per order)
+    const types = s.defects || [];
+    const recs = (s.qaDefects || []).filter(r => (scope === 'day' ? r.date === day : true) && (!lineF || r.line === lineF));
+    // group by line -> po -> station, summing each defect type
+    const grid = {}; // line -> key(po|station) -> { po, station, fg, byType, total }
+    recs.forEach(r => {
+      grid[r.line] = grid[r.line] || {};
+      const k = r.po + '|' + r.station;
+      const g = grid[r.line][k] || { po: r.po, station: r.station, fg: r.fg, byType: {}, total: 0 };
+      (r.items || []).forEach(it => { const q = +it.qty || 0; g.byType[it.type] = (g.byType[it.type] || 0) + q; g.total += q; });
+      grid[r.line][k] = g;
+    });
+    const lineIds = s.lines.filter(l => grid[l.id]).map(l => l.id);
+    const typeTotals = {}; let grand = 0;
+    lineIds.forEach(ln => Object.keys(grid[ln]).forEach(k => { const g = grid[ln][k]; grand += g.total; types.forEach(ty => { typeTotals[ty] = (typeTotals[ty] || 0) + (g.byType[ty] || 0); }); }));
+    const hasData = lineIds.length > 0 && types.length > 0;
+
+    function exportReport() {
+      const headers = [lang === 'th' ? 'สาย' : 'Line', lang === 'th' ? 'ใบสั่งผลิต' : 'Order', lang === 'th' ? 'สถานี QA' : 'QA station', lang === 'th' ? 'สินค้า' : 'Product'].concat(types).concat([lang === 'th' ? 'รวม' : 'Total']);
+      const rows = [];
+      lineIds.forEach(ln => { const ln0 = s.lines.find(l => l.id === ln); const lineName = ln0 ? ln0.name : 'Line ' + ln;
+        Object.keys(grid[ln]).forEach(k => { const g = grid[ln][k]; rows.push([lineName, g.po, g.station, D.fgName(s, g.fg, lang)].concat(types.map(ty => g.byType[ty] || 0)).concat([g.total])); }); });
+      rows.push([lang === 'th' ? 'รวมทุกสาย' : 'All', '', '', ''].concat(types.map(ty => typeTotals[ty] || 0)).concat([grand]));
+      window.PG_UI.exportCsv('qa-defect-report-' + (scope === 'day' ? day : 'all') + '.csv', headers, rows);
+    }
+
+    return React.createElement('div', { className: 'card' },
+      React.createElement('div', { className: 'card-h' },
+        React.createElement(Icon, { name: 'alert', size: 15, style: { color: 'var(--danger)' } }),
+        React.createElement('h3', null, lang === 'th' ? 'รายงาน Defect แยกประเภท' : 'Defect breakdown report'),
+        React.createElement('div', { className: 'card-h-actions row', style: { gap: 8, flexWrap: 'wrap' } },
+          React.createElement('div', { className: 'pill-tabs' },
+            React.createElement('button', { className: scope === 'day' ? 'on' : '', onClick: () => setScope('day') }, lang === 'th' ? 'รายวัน' : 'By day'),
+            React.createElement('button', { className: scope === 'all' ? 'on' : '', onClick: () => setScope('all') }, lang === 'th' ? 'รวมทุกวัน (ต่อใบ)' : 'All (per order)')),
+          React.createElement('select', { className: 'select', style: { width: 148 }, value: lineF, onChange: e => setLineF(e.target.value) },
+            [React.createElement('option', { key: '_all', value: '' }, lang === 'th' ? 'ทุกสายการผลิต' : 'All lines')].concat(
+              s.lines.map(ln => React.createElement('option', { key: ln.id, value: ln.id }, ln.name)))),
+          React.createElement('button', { className: 'btn btn-sm', onClick: exportReport, disabled: !hasData }, React.createElement(Icon, { name: 'export', size: 14 }), lang === 'th' ? 'ส่งออก CSV' : 'Export CSV'),
+          scope === 'day' && React.createElement(React.Fragment, null,
+            React.createElement('span', { className: 'faint', style: { fontSize: 11.5 } }, lang === 'th' ? 'เลือกวัน' : 'Day'),
+            React.createElement(DateField, { value: day, onChange: setDay, style: { width: 150 } })))),
+      !hasData
+        ? React.createElement('div', { className: 'empty', style: { padding: '40px 20px' } },
+            React.createElement(Icon, { name: 'alert', size: 26, style: { color: 'var(--text-faint)' } }),
+            React.createElement('div', { style: { marginTop: 8, fontSize: 12.5 } }, types.length === 0 ? (lang === 'th' ? 'ยังไม่มีรายการใน QA Check List' : 'No QA check-list entries') : (lang === 'th' ? 'ยังไม่มีการระบุประเภท Defect ในช่วงนี้' : 'No categorised defects for this range')),
+            React.createElement('div', { className: 'faint', style: { fontSize: 11, marginTop: 3 } }, lang === 'th' ? 'ระบุประเภทได้จากแท็บกระดาน โดยคลิกที่ยอด Defect ของวัน' : 'Tag defects from the Board tab by clicking a day total'))
+        : React.createElement('div', { style: { overflowX: 'auto' } },
+            React.createElement('table', { className: 'tbl tbl-grid', style: { minWidth: Math.max(620, 300 + types.length * 92) } },
+              React.createElement('thead', null, React.createElement('tr', null,
+                React.createElement('th', { style: { position: 'sticky', left: 0, zIndex: 2, background: 'var(--surface-2)', minWidth: 240 } }, lang === 'th' ? 'สาย / ใบสั่งผลิต · สถานี' : 'Line / Order · station'),
+                types.map(ty => React.createElement('th', { key: ty, className: 'num', style: { background: 'var(--surface-2)', whiteSpace: 'nowrap' } }, ty)),
+                React.createElement('th', { className: 'num', style: { background: 'var(--surface-2)' } }, lang === 'th' ? 'รวม' : 'Total'))),
+              React.createElement('tbody', null,
+                lineIds.reduce((rows, ln) => {
+                  const ln0 = s.lines.find(l => l.id === ln);
+                  rows.push(React.createElement('tr', { key: 'L_' + ln, style: { background: 'var(--surface-2)' } },
+                    React.createElement('td', { style: { position: 'sticky', left: 0, zIndex: 1, background: 'var(--surface-2)', fontWeight: 700, fontSize: 11.5 } }, ln0 ? ln0.name : 'Line ' + ln),
+                    types.map(ty => { let sm = 0; Object.keys(grid[ln]).forEach(k => sm += (grid[ln][k].byType[ty] || 0)); return React.createElement('td', { key: ty, className: 'num mono', style: { fontWeight: 700, color: sm ? 'var(--danger)' : 'var(--text-faint)' } }, sm ? fmt(sm) : '·'); }),
+                    React.createElement('td', { className: 'num mono', style: { fontWeight: 700, background: 'var(--surface-3)' } }, fmt(Object.keys(grid[ln]).reduce((a, k) => a + grid[ln][k].total, 0)))));
+                  Object.keys(grid[ln]).forEach(k => { const g = grid[ln][k];
+                    rows.push(React.createElement('tr', { key: ln + '_' + k },
+                      React.createElement('td', { style: { position: 'sticky', left: 0, zIndex: 1, background: 'var(--surface)', paddingLeft: 26 } },
+                        React.createElement('div', { className: 'row', style: { gap: 6 } }, React.createElement('span', { className: 'mono', style: { fontSize: 10.5, fontWeight: 600, color: 'var(--primary)' } }, g.po), React.createElement('span', { style: { fontSize: 11, fontWeight: 600 } }, g.station)),
+                        React.createElement('div', { className: 'faint', style: { fontSize: 9.5, marginTop: 1 } }, D.fgName(s, g.fg, lang))),
+                      types.map(ty => { const v = g.byType[ty] || 0; return React.createElement('td', { key: ty, className: 'num mono', style: { color: v ? 'var(--danger)' : 'var(--text-faint)', fontWeight: v ? 600 : 400 } }, v ? fmt(v) : '·'); }),
+                      React.createElement('td', { className: 'num mono', style: { fontWeight: 600, background: 'var(--surface-2)' } }, fmt(g.total)))); });
+                  return rows;
+                }, []).concat([
+                  React.createElement('tr', { key: '_grand', style: { borderTop: '2px solid var(--border-strong)' } },
+                    React.createElement('td', { style: { position: 'sticky', left: 0, zIndex: 1, background: 'var(--surface-2)', fontWeight: 700 } }, lang === 'th' ? 'รวมทุกสาย' : 'All lines'),
+                    types.map(ty => React.createElement('td', { key: ty, className: 'num mono', style: { fontWeight: 700, background: 'var(--surface-2)', color: 'var(--danger)' } }, fmt(typeTotals[ty] || 0))),
+                    React.createElement('td', { className: 'num mono', style: { fontWeight: 700, background: 'var(--surface-3)' } }, fmt(grand)))
+                ])))));
   }
 
   window.PG_ShopFloor = ShopFloor;

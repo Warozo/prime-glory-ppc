@@ -56,7 +56,7 @@
     schedule: (p) => React.createElement(window.PG_Schedule, p),
     designer: (p) => React.createElement(window.PG_Designer, p),
     shopfloor: (p) => React.createElement(window.PG_ShopFloor, p),
-    qa: (p) => React.createElement(window.PG_QA, p),
+    qa: (p) => React.createElement(window.PG_QA, p), // p already carries state/setState/go/readOnly
     receiving: (p) => React.createElement(window.PG_Receiving, p),
     issue: (p) => React.createElement(window.PG_Issue, p),
     fgreceiving: (p) => React.createElement(window.PG_FGReceiving, p),
