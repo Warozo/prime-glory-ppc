@@ -189,7 +189,7 @@
 
   function buildState() {
     return JSON.parse(JSON.stringify({
-      raw: RAW, fg: FG, boms: BOMS, customers: CUSTOMERS, suppliers: SUPPLIERS, salesReps: SALESREPS,
+      raw: RAW, fg: FG, boms: BOMS, customers: CUSTOMERS, suppliers: SUPPLIERS, salesReps: SALESREPS, defects: [],
       lines: LINES, workflows: WORKFLOWS, orders: ORDERS, lots: LOTS, receipts: RECEIPTS,
       lotsWip: [], prodOrders: PRODORDERS, fgPending: FG_PENDING, fgStock: FG_STOCK, fgSales: [],
       reservedByRm: {}, scheduleBars: [], issues: [], procurement: {},

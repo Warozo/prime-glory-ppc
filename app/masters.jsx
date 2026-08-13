@@ -690,6 +690,7 @@
       { key: 'customers', icon: 'orders', th: 'ลูกค้า', en: 'Customers', subTh: 'ใช้ใน คำสั่งซื้อลูกค้า + เอกสารขาย', subEn: 'Used in customer orders + sales documents', codeMap: 'customerCodes', codeTh: 'รหัสลูกค้า', codeEn: 'Customer code' },
       { key: 'suppliers', icon: 'receive', th: 'ผู้ขาย / ซัพพลายเออร์', en: 'Suppliers', subTh: 'ใช้ใน รับเข้าวัตถุดิบ', subEn: 'Used in material receiving', codeMap: 'supplierCodes', codeTh: 'รหัสผู้ขาย / ซัพพลายเออร์', codeEn: 'Supplier code' },
       { key: 'salesReps', icon: 'users', th: 'พนักงานขาย', en: 'Sales reps', subTh: 'ใช้ใน สร้างเอกสารขาย (ผู้บันทึก)', subEn: 'Used in sales documents (recorded by)' },
+      { key: 'defects', icon: 'alert', th: 'QA Check List', en: 'QA Check List', subTh: 'ชื่อ Defect สำหรับกระดานคุณภาพ (QA)', subEn: 'Defect names for the QA board' },
     ];
     const cfgOf = (k) => LISTS.find(l => l.key === k);
     const listOf = (k) => state[k] || [];
@@ -731,8 +732,8 @@
     }
 
     return React.createElement('div', null,
-      React.createElement(PageHead, { title: lang === 'th' ? 'ทะเบียนคู่ค้า / พนักงาน' : 'Partners & staff registry', sub: lang === 'th' ? 'จัดการรายชื่อลูกค้า ผู้ขาย และพนักงานขาย สำหรับใช้เป็นตัวเลือกในฟอร์ม' : 'Manage customers, suppliers and sales reps used as form dropdowns' }),
-      React.createElement('div', { className: 'grid g-3', style: { alignItems: 'start' } },
+      React.createElement(PageHead, { title: lang === 'th' ? 'ทะเบียนคู่ค้า / พนักงาน / QA Check List' : 'Partners / staff / QA check list', sub: lang === 'th' ? 'จัดการรายชื่อลูกค้า ผู้ขาย พนักงานขาย และรายการ Defect สำหรับใช้เป็นตัวเลือกในฟอร์ม' : 'Manage customers, suppliers, sales reps and defect names used as form dropdowns' }),
+      React.createElement('div', { className: 'grid g-4', style: { alignItems: 'start' } },
         LISTS.map(L => React.createElement('div', { key: L.key, className: 'card' },
           React.createElement('div', { className: 'card-h' },
             React.createElement(Icon, { name: L.icon, size: 15, style: { color: 'var(--primary)' } }),
