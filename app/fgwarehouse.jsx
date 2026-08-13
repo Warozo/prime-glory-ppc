@@ -49,7 +49,10 @@
         const totalRecv = already + qty;
         const status = totalRecv >= item.qty ? 'accepted' : 'pending';
         const fgPending = prev.fgPending.map(x => x.id === f.id ? { ...x, receipts, status } : x);
-        const fgStock = [{ sid: D.genId('FG'), fg: item.fg, qty, lot: form.lotNo, expiry: form.expiry || prev.today }, ...prev.fgStock];
+        // top up an existing lot (accumulate) when a target sid is given, else create a new lot row
+        const fgStock = form.targetSid
+          ? prev.fgStock.map(r => r.sid === form.targetSid ? Object.assign({}, r, { qty: r.qty + qty }) : r)
+          : [{ sid: D.genId('FG'), fg: item.fg, qty: qty, lot: form.lotNo, expiry: form.expiry || prev.today }, ...prev.fgStock];
         return { ...prev, fgPending, fgStock };
       });
       toast(t('toast.received'));
@@ -159,23 +162,53 @@
   function ReceiveFGModal({ item, received, ready, state, t, lang, onClose, onSubmit }) {
     const e = React.createElement;
     const remain = ready != null ? ready : (item.qty - received);
+    // existing lots of THIS product that can be topped up (accumulate) instead of a new lot
+    const existingLots = (state.fgStock || []).filter(x => x.fg === item.fg);
+    const [mode, setMode] = React.useState('new'); // new lot | existing (top up)
+    const [targetSid, setTargetSid] = React.useState(existingLots[0] ? existingLots[0].sid : '');
+    const target = existingLots.find(x => x.sid === targetSid);
+    const outstanding = (target && target.fullLot != null) ? Math.max(0, target.fullLot - target.qty) : null;
     const [f, setF] = React.useState({ lotNo: 'FGLOT-' + item.po.replace('PO-', '') + '-' + ((item.receipts || []).length + 1), qty: remain, date: state.today, expiry: '' });
     const set = (k, v) => setF(p => ({ ...p, [k]: v }));
-    const valid = f.lotNo.trim() && +f.qty > 0 && +f.qty <= remain;
+    // when switching to top-up (or picking a lot), suggest the smaller of ready / that lot's outstanding
+    React.useEffect(() => {
+      if (mode === 'existing') { const cap = (outstanding != null && outstanding > 0) ? Math.min(remain, outstanding) : remain; setF(p => Object.assign({}, p, { qty: cap })); }
+      else setF(p => Object.assign({}, p, { qty: remain }));
+    }, [mode, targetSid]);
+    const qn = +f.qty;
+    const valid = qn > 0 && qn <= remain && (mode === 'new' ? f.lotNo.trim() : !!target);
+    const submit = () => (mode === 'existing' && target)
+      ? onSubmit({ lotNo: target.lot, qty: f.qty, date: f.date, expiry: target.expiry, targetSid: target.sid })
+      : onSubmit(f);
     return e(Modal, { title: t('fg.receivebatch') + ' · ' + item.id, onClose, width: 480,
       footer: e(React.Fragment, null, e('button', { className: 'btn', onClick: onClose }, t('btn.cancel')),
-        e('button', { className: 'btn btn-pri', disabled: !valid, onClick: () => onSubmit(f) }, e(Icon, { name: 'check', size: 14 }), t('fg.acceptbatch'))) },
+        e('button', { className: 'btn btn-pri', disabled: !valid, onClick: submit }, e(Icon, { name: 'check', size: 14 }), t('fg.acceptbatch'))) },
       e('div', { style: { background: 'var(--surface-2)', borderRadius: 8, padding: '10px 12px', marginBottom: 14, fontSize: 12 } },
         e('div', { className: 'row', style: { justifyContent: 'space-between' } }, e('span', { className: 'faint' }, t('f.product')), e('b', null, D.fgName(state, item.fg, lang))),
         e('div', { className: 'row', style: { justifyContent: 'space-between', marginTop: 4 } }, e('span', { className: 'faint' }, t('f.po')), e('b', { className: 'mono' }, item.po)),
         e('div', { className: 'row', style: { justifyContent: 'space-between', marginTop: 4 } }, e('span', { className: 'faint' }, t('fg.ready')), e('b', { className: 'mono', style: { color: 'var(--warn)' } }, fmt(remain) + ' ' + t('u.pcs'))),
         e('div', { className: 'row', style: { justifyContent: 'space-between', marginTop: 4 } }, e('span', { className: 'faint' }, t('fg.received') + ' / ' + t('f.qty')), e('b', { className: 'mono', style: { color: 'var(--primary)' } }, fmt(received) + ' / ' + fmt(item.qty) + ' ' + t('u.pcs')))),
-      e('div', { className: 'grid g-2', style: { gap: 12 } },
-        e('div', { style: { gridColumn: 'span 2' } }, e(Field, { label: t('f.lot'), required: true, hint: lang === 'th' ? 'กรอกเลขล็อตก่อนรับเข้า' : 'Enter the lot number before receiving' },
-          e('input', { className: 'input mono', value: f.lotNo, onChange: ev => set('lotNo', ev.target.value), placeholder: 'FGLOT-____' }))),
-        e(Field, { label: t('f.qty') + ' (≤ ' + fmt(remain) + ')', required: true }, e('input', { className: 'input mono', type: 'number', value: f.qty, onChange: ev => set('qty', ev.target.value), max: remain })),
-        e(Field, { label: t('f.date'), required: true }, e(DateField, { value: f.date, onChange: v => set('date', v) })),
-        e('div', { style: { gridColumn: 'span 2' } }, e(Field, { label: t('f.expiry') }, e(DateField, { value: f.expiry, onChange: v => set('expiry', v) })))));
+      // choose new lot vs top up an existing one (only when the product already has stock lots)
+      existingLots.length > 0 && e('div', { className: 'pill-tabs', style: { marginBottom: 12, display: 'inline-flex' } },
+        e('button', { className: mode === 'new' ? 'on' : '', onClick: () => setMode('new') }, lang === 'th' ? 'ลอตใหม่' : 'New lot'),
+        e('button', { className: mode === 'existing' ? 'on' : '', onClick: () => setMode('existing') }, lang === 'th' ? 'เติมลอตเดิม (ยอดคงค้าง)' : 'Top up existing lot')),
+      mode === 'new'
+        ? e('div', { className: 'grid g-2', style: { gap: 12 } },
+            e('div', { style: { gridColumn: 'span 2' } }, e(Field, { label: t('f.lot'), required: true, hint: lang === 'th' ? 'กรอกเลขล็อตก่อนรับเข้า' : 'Enter the lot number before receiving' },
+              e('input', { className: 'input mono', value: f.lotNo, onChange: ev => set('lotNo', ev.target.value), placeholder: 'FGLOT-____' }))),
+            e(Field, { label: t('f.qty') + ' (≤ ' + fmt(remain) + ')', required: true }, e('input', { className: 'input mono', type: 'number', value: f.qty, onChange: ev => set('qty', ev.target.value), max: remain })),
+            e(Field, { label: t('f.date'), required: true }, e(DateField, { value: f.date, onChange: v => set('date', v) })),
+            e('div', { style: { gridColumn: 'span 2' } }, e(Field, { label: t('f.expiry') }, e(DateField, { value: f.expiry, onChange: v => set('expiry', v) }))))
+        : e('div', { className: 'grid g-2', style: { gap: 12 } },
+            e('div', { style: { gridColumn: 'span 2' } }, e(Field, { label: lang === 'th' ? 'เลือกลอตที่จะเติมยอด' : 'Lot to top up', required: true },
+              e('select', { className: 'select mono', value: targetSid, onChange: ev => setTargetSid(ev.target.value) },
+                existingLots.map(l => e('option', { key: l.sid, value: l.sid }, l.lot + ' · ' + (lang === 'th' ? 'มี ' : 'have ') + fmt(l.qty) + (l.fullLot != null ? (' / ' + (lang === 'th' ? 'เต็มลอต ' : 'full ') + fmt(l.fullLot)) : '')))))),
+            target && e('div', { style: { gridColumn: 'span 2', background: 'var(--surface-2)', borderRadius: 8, padding: '8px 12px', fontSize: 11.5 } },
+              e('div', { className: 'row', style: { justifyContent: 'space-between' } }, e('span', { className: 'faint' }, lang === 'th' ? 'ยอดในลอตปัจจุบัน' : 'Current lot qty'), e('b', { className: 'mono' }, fmt(target.qty) + ' ' + t('u.pcs'))),
+              e('div', { className: 'row', style: { justifyContent: 'space-between', marginTop: 3 } }, e('span', { className: 'faint' }, lang === 'th' ? 'ยอดคงค้างรับของลอตนี้' : 'Lot outstanding'), e('b', { className: 'mono', style: { color: outstanding && outstanding > 0 ? 'var(--warn)' : 'var(--text-faint)' } }, outstanding != null ? fmt(outstanding) + ' ' + t('u.pcs') : (lang === 'th' ? 'ยังไม่ตั้งจำนวนเต็มลอต' : 'no full-lot set'))),
+              e('div', { className: 'row', style: { justifyContent: 'space-between', marginTop: 3 } }, e('span', { className: 'faint' }, lang === 'th' ? 'หลังเติมจะเป็น' : 'After top-up'), e('b', { className: 'mono', style: { color: 'var(--ok)' } }, fmt(target.qty + (qn > 0 ? qn : 0)) + ' ' + t('u.pcs')))),
+            e(Field, { label: t('f.qty') + ' (≤ ' + fmt(remain) + ')', required: true, hint: lang === 'th' ? 'ดึงจากยอดพร้อมรับของใบผลิต' : "drawn from the order's ready qty" }, e('input', { className: 'input mono', type: 'number', value: f.qty, onChange: ev => set('qty', ev.target.value), max: remain })),
+            e(Field, { label: t('f.date'), required: true }, e(DateField, { value: f.date, onChange: v => set('date', v) }))));
   }
 
   /* ---------------- Warehouse Stock ---------------- */
