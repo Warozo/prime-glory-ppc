@@ -168,8 +168,11 @@
     const [editLine, setEditLine] = React.useState(null); // { idx, rm, qty, unit } or { idx:-1 } for new
     const [fgEdit, setFgEdit] = React.useState(null);
     const [draft, setDraft] = React.useState(null); // { lines } while creating a new version (reorder session)
+    const [bomCat, setBomCat] = React.useState('all'); // BOM zone filter: all | Raw material | Packaging
     const dragIdx = React.useRef(null);
     const bom = state.boms[fgCode];
+    // a BOM line's zone comes from its material's category (only Packaging vs Raw material)
+    const catOfRm = (rm) => { const r = (state.raw || []).find(x => x.code === rm); return (r && r.cat === 'Packaging') ? 'Packaging' : 'Raw material'; };
     // a material may be used only once per formula
     const usedRms = (bom ? bom.lines : []).map(l => l.rm);
     const firstFreeRm = ((state.raw.find(r => usedRms.indexOf(r.code) < 0)) || {}).code || '';
@@ -267,18 +270,16 @@
                       React.createElement('button', { className: 'btn btn-sm btn-pri', disabled: !firstFreeRm,
                         title: firstFreeRm ? null : (lang === 'th' ? 'วัตถุดิบทุกตัวถูกใช้ในสูตรนี้แล้ว' : 'Every material is already in this formula'),
                         onClick: () => setEditLine({ idx: -1, rm: firstFreeRm, qty: '', unit: 'g' }) }, React.createElement(Icon, { name: 'plus', size: 13 }), t('bom.addline')))),
+            // zone filter (view mode only — a draft is a flat drag-to-reorder list)
+            !draft && bom && bom.lines.length > 0 && React.createElement('div', { style: { padding: '0 14px 10px' } },
+              React.createElement('div', { className: 'pill-tabs' },
+                [['all', lang === 'th' ? 'รายการทั้งหมด' : 'All'], ['Raw material', 'Raw material'], ['Packaging', 'Packaging']].map(o =>
+                  React.createElement('button', { key: o[0], className: bomCat === o[0] ? 'on' : '', onClick: () => setBomCat(o[0]) }, o[1])))),
             React.createElement('table', { className: 'tbl' },
               React.createElement('thead', null, React.createElement('tr', null, draft && React.createElement('th', { style: { width: 28 } }, ''), React.createElement('th', null, t('f.code')), React.createElement('th', null, t('rawmat')), React.createElement('th', { className: 'num' }, t('bom.qtyper')), React.createElement('th', null, t('f.unit')), React.createElement('th', { style: { width: 80 } }, ''))),
               React.createElement('tbody', null, (function () {
-                const rows = draft ? draft.lines : ((bom && bom.lines) || []);
-                if (!rows.length) return React.createElement('tr', null, React.createElement('td', { colSpan: draft ? 6 : 5, className: 'empty' }, t('tbl.noresults')));
-                return rows.map((l, i) => React.createElement('tr', Object.assign({ key: i }, draft ? {
-                    draggable: true,
-                    onDragStart: () => { dragIdx.current = i; },
-                    onDragOver: (e) => e.preventDefault(),
-                    onDrop: () => { reorderDraft(dragIdx.current, i); dragIdx.current = null; },
-                    style: { cursor: 'grab' }
-                  } : {}),
+                // one BOM line row; i is its index in the underlying formula array (for edit/delete)
+                const renderRow = (l, i, dragProps) => React.createElement('tr', Object.assign({ key: i }, dragProps || {}),
                   draft && React.createElement('td', { style: { color: 'var(--text-faint)', textAlign: 'center' }, title: lang === 'th' ? 'ลากเพื่อจัดลำดับ' : 'Drag to reorder' }, '⣿'),
                   React.createElement('td', { className: 'mono', style: { fontWeight: 600, color: 'var(--primary)' } }, l.rm),
                   React.createElement('td', { style: { fontWeight: 600 } }, D.rmName(state, l.rm, lang)),
@@ -286,7 +287,33 @@
                   React.createElement('td', { className: 'mono' }, l.unit),
                   React.createElement('td', { className: 'num' }, (draft || readOnly) ? null : React.createElement('div', { className: 'row', style: { gap: 4, justifyContent: 'flex-end' } },
                     React.createElement('button', { className: 'btn btn-sm btn-ghost btn-icon', onClick: () => setEditLine({ idx: i, rm: l.rm, qty: l.qty, unit: l.unit }) }, React.createElement(Icon, { name: 'edit', size: 13 })),
-                    canDelete && React.createElement('button', { className: 'btn btn-sm btn-ghost btn-icon', onClick: () => delLine(i) }, React.createElement(Icon, { name: 'trash', size: 13, style: { color: 'var(--danger)' } }))))));
+                    canDelete && React.createElement('button', { className: 'btn btn-sm btn-ghost btn-icon', onClick: () => delLine(i) }, React.createElement(Icon, { name: 'trash', size: 13, style: { color: 'var(--danger)' } })))));
+
+                // draft = flat drag-to-reorder list (grouping would break index-based reordering)
+                if (draft) {
+                  if (!draft.lines.length) return React.createElement('tr', null, React.createElement('td', { colSpan: 6, className: 'empty' }, t('tbl.noresults')));
+                  return draft.lines.map((l, i) => renderRow(l, i, {
+                    draggable: true, onDragStart: () => { dragIdx.current = i; }, onDragOver: (e) => e.preventDefault(),
+                    onDrop: () => { reorderDraft(dragIdx.current, i); dragIdx.current = null; }, style: { cursor: 'grab' } }));
+                }
+
+                // view mode — keep each line's real index, filter, then group Packaging above Raw material
+                const indexed = ((bom && bom.lines) || []).map((l, i) => ({ l: l, i: i, cat: catOfRm(l.rm) }));
+                const shown = bomCat === 'all' ? indexed : indexed.filter(x => x.cat === bomCat);
+                if (!shown.length) return React.createElement('tr', null, React.createElement('td', { colSpan: 5, className: 'empty' }, t('tbl.noresults')));
+                const out = [];
+                ['Packaging', 'Raw material'].forEach(zone => {
+                  const zl = shown.filter(x => x.cat === zone);
+                  if (!zl.length) return;
+                  // zone header only when both zones can appear (filter = all)
+                  if (bomCat === 'all') out.push(React.createElement('tr', { key: 'zone-' + zone, style: { background: 'var(--surface-2)' } },
+                    React.createElement('td', { colSpan: 5, style: { fontWeight: 700, fontSize: 11, color: 'var(--text-muted)', letterSpacing: .3 } },
+                      React.createElement('span', { className: 'row', style: { gap: 6 } },
+                        React.createElement(Icon, { name: zone === 'Packaging' ? 'box' : 'items', size: 12, style: { color: 'var(--primary)' } }),
+                        zone, React.createElement('span', { className: 'badge badge-soft', style: { fontSize: 9.5 } }, zl.length)))));
+                  zl.forEach(x => out.push(renderRow(x.l, x.i)));
+                });
+                return out;
               })()))),
           React.createElement('div', { className: 'card' },
             React.createElement('div', { className: 'card-h' }, React.createElement(Icon, { name: 'calc', size: 15, style: { color: 'var(--primary)' } }), React.createElement('h3', null, lang === 'th' ? 'คำนวณความต้องการวัตถุดิบ' : 'Material Requirement Calculation'),
